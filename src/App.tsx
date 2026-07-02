@@ -46,6 +46,13 @@ const sideLabels: Record<Side, string> = {
   HAN: '한'
 };
 
+type BoardSeat = 'bottom' | 'top';
+
+const boardSeatLabels: Record<BoardSeat, string> = {
+  bottom: '아래',
+  top: '위'
+};
+
 const difficultyLabels: Record<Difficulty, string> = {
   easy: '쉬움',
   normal: '보통',
@@ -57,6 +64,7 @@ const difficultyOptions: Difficulty[] = ['easy', 'normal', 'hard'];
 
 export default function App() {
   const [humanSide, setHumanSide] = useState<Side>('CHO');
+  const [humanSeat, setHumanSeat] = useState<BoardSeat>('bottom');
   const [choFormation, setChoFormation] = useState<Formation>('inner-elephant');
   const [hanFormation, setHanFormation] = useState<Formation>('inner-elephant');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
@@ -136,6 +144,7 @@ export default function App() {
           <BoardView
             game={game}
             humanSide={humanSide}
+            humanSeat={humanSeat}
             selected={selected}
             legalTargetKeys={legalTargetKeys}
             lastMove={game.history.length > 0 ? game.history[game.history.length - 1] : null}
@@ -149,6 +158,17 @@ export default function App() {
                 {(['CHO', 'HAN'] as Side[]).map((side) => (
                   <button key={side} className={humanSide === side ? 'active' : ''} onClick={() => setHumanSide(side)}>
                     {sideLabels[side]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="controlGroup">
+              <span className="groupLabel">사용자 위치</span>
+              <div className="segmented">
+                {(['bottom', 'top'] as BoardSeat[]).map((seat) => (
+                  <button key={seat} className={humanSeat === seat ? 'active' : ''} onClick={() => setHumanSeat(seat)}>
+                    {boardSeatLabels[seat]}
                   </button>
                 ))}
               </div>
@@ -206,6 +226,7 @@ function FormationSelect({
 function BoardView({
   game,
   humanSide,
+  humanSeat,
   selected,
   legalTargetKeys,
   lastMove,
@@ -213,6 +234,7 @@ function BoardView({
 }: {
   game: GameState;
   humanSide: Side;
+  humanSeat: BoardSeat;
   selected: Position | null;
   legalTargetKeys: Set<string>;
   lastMove: Move | null;
@@ -222,7 +244,7 @@ function BoardView({
   for (let displayY = 0; displayY < 10; displayY += 1) {
     for (let displayX = 0; displayX < 9; displayX += 1) {
       const display = { x: displayX, y: displayY };
-      points.push({ display, board: displayToBoard(display, humanSide) });
+      points.push({ display, board: displayToBoard(display, humanSide, humanSeat) });
     }
   }
 
@@ -304,7 +326,8 @@ function MoveList({ history }: { history: Move[] }) {
   );
 }
 
-function displayToBoard(pos: Position, humanSide: Side): Position {
-  if (humanSide === 'CHO') return pos;
+function displayToBoard(pos: Position, humanSide: Side, humanSeat: BoardSeat): Position {
+  const shouldRotate = humanSeat === 'bottom' ? humanSide === 'HAN' : humanSide === 'CHO';
+  if (!shouldRotate) return pos;
   return { x: 8 - pos.x, y: 9 - pos.y };
 }
