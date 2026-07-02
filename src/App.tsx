@@ -348,6 +348,7 @@ export default function App() {
           <div>
             <p className="eyebrow">프로젝트 외통수</p>
             <h1>사람 vs AI 장기</h1>
+            <p className="betaNotice">AI 대국 베타입니다. 실수할 수 있으며, 분석과 개선을 계속 진행 중입니다.</p>
           </div>
           <div className="statusPanel">
             <span className={`turnBadge ${game.turn.toLowerCase()}`}>{sideLabels[game.turn]} 차례</span>
@@ -429,6 +430,7 @@ export default function App() {
 
             <div className="controlGroup">
               <span className="groupLabel">AI 난이도</span>
+              <p className="controlHint">AI 상태: 베타 · 강도: 실험 중</p>
               <div className="segmented">
                 {difficultyOptions.map((level) => (
                   <button

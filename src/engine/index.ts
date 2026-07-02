@@ -7,6 +7,7 @@ export * from './notation';
 export * from './history';
 export * from './arena';
 export * from './arenaLeague';
+export * from './betaReadiness';
 export * from './openingBook';
 export * from './openingBookData';
 export * from './analysis';

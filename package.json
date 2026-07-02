@@ -12,7 +12,9 @@
     "opening:inspect": "tsx scripts/inspect-opening-book.ts",
     "opening:test-build": "tsx scripts/build-opening-book.ts --input data/fixtures/opening-records.sample.csv --output data/opening-book/opening-book.sample.json --summary data/opening-book/opening-book-summary.sample.json",
     "arena:league": "tsx scripts/run-arena-league.ts",
-    "arena:league:quick": "tsx scripts/run-arena-league.ts --quick"
+    "arena:league:quick": "tsx scripts/run-arena-league.ts --quick",
+    "beta:check": "tsx scripts/check-beta-readiness.ts",
+    "beta:check:strict": "tsx scripts/check-beta-readiness.ts --strict"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
