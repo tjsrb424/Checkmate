@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   Difficulty,
   Formation,
@@ -215,29 +216,43 @@ function BoardView({
   lastMove: Move | null;
   onCellClick: (pos: Position) => void;
 }) {
-  const cells: Position[] = [];
-  for (let row = 0; row < 10; row += 1) {
-    for (let col = 0; col < 9; col += 1) {
-      cells.push(displayToBoard({ x: col, y: row }, humanSide));
+  const points: Array<{ display: Position; board: Position }> = [];
+  for (let displayY = 0; displayY < 10; displayY += 1) {
+    for (let displayX = 0; displayX < 9; displayX += 1) {
+      const display = { x: displayX, y: displayY };
+      points.push({ display, board: displayToBoard(display, humanSide) });
     }
   }
 
   return (
     <div className="boardFrame">
       <div className="janggiBoard">
-        {cells.map((pos) => {
-          const piece = game.board[pos.y][pos.x];
-          const key = positionKey(pos);
-          const selectedCell = selected ? samePosition(selected, pos) : false;
-          const last = lastMove && (samePosition(lastMove.from, pos) || samePosition(lastMove.to, pos));
+        <svg className="boardLines" viewBox="0 0 8 9" preserveAspectRatio="none" aria-hidden="true">
+          {Array.from({ length: 9 }, (_, x) => (
+            <line key={`file-${x}`} x1={x} y1="0" x2={x} y2="9" vectorEffect="non-scaling-stroke" />
+          ))}
+          {Array.from({ length: 10 }, (_, y) => (
+            <line key={`rank-${y}`} x1="0" y1={y} x2="8" y2={y} vectorEffect="non-scaling-stroke" />
+          ))}
+          <line x1="3" y1="0" x2="5" y2="2" vectorEffect="non-scaling-stroke" />
+          <line x1="5" y1="0" x2="3" y2="2" vectorEffect="non-scaling-stroke" />
+          <line x1="3" y1="7" x2="5" y2="9" vectorEffect="non-scaling-stroke" />
+          <line x1="5" y1="7" x2="3" y2="9" vectorEffect="non-scaling-stroke" />
+        </svg>
+        {points.map(({ display, board }) => {
+          const piece = game.board[board.y][board.x];
+          const key = positionKey(board);
+          const selectedCell = selected ? samePosition(selected, board) : false;
+          const last = lastMove && (samePosition(lastMove.from, board) || samePosition(lastMove.to, board));
           return (
             <button
               key={key}
-              className={`cell ${selectedCell ? 'selected' : ''} ${legalTargetKeys.has(key) ? 'legalTarget' : ''} ${
-                last ? 'lastMove' : ''
-              }`}
-              onClick={() => onCellClick(pos)}
-              aria-label={`${pos.x},${pos.y}`}
+              className={`intersectionPoint ${selectedCell ? 'selected' : ''} ${
+                legalTargetKeys.has(key) ? 'legalTarget' : ''
+              } ${last ? 'lastMove' : ''}`}
+              style={intersectionStyle(display)}
+              onClick={() => onCellClick(board)}
+              aria-label={`${board.x},${board.y}`}
             >
               {piece && (
                 <span className={`piece ${piece.side.toLowerCase()}`}>
@@ -250,6 +265,20 @@ function BoardView({
       </div>
     </div>
   );
+}
+
+function intersectionStyle(display: Position): CSSProperties {
+  return {
+    '--x': display.x,
+    '--y': display.y,
+    left: boardOffset(display.x),
+    top: boardOffset(display.y)
+  } as CSSProperties;
+}
+
+function boardOffset(index: number): string {
+  if (index === 0) return 'var(--board-pad)';
+  return `calc(var(--board-pad) + ${Array.from({ length: index }, () => 'var(--point-gap)').join(' + ')})`;
 }
 
 function MoveList({ history }: { history: Move[] }) {

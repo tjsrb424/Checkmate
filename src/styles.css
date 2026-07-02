@@ -104,106 +104,147 @@ h1 {
 }
 
 .boardFrame {
-  width: min(100%, 720px);
+  width: fit-content;
+  max-width: 100%;
   margin-inline: auto;
-  padding: 16px;
+  padding: 14px;
   border: 1px solid rgba(72, 45, 25, 0.22);
   border-radius: 8px;
-  background: #b98245;
+  background:
+    linear-gradient(135deg, rgba(255, 240, 196, 0.24), transparent 34%),
+    linear-gradient(90deg, rgba(73, 43, 21, 0.13), transparent 26%, rgba(255, 255, 255, 0.08) 53%, transparent),
+    #b47a3b;
   box-shadow: 0 26px 70px rgba(51, 35, 21, 0.24);
+  overflow: auto;
 }
 
 .janggiBoard {
+  --point-gap: clamp(52px, 7vw, 74px);
+  --piece-size: clamp(37px, 5.04vw, 53px);
+  --board-pad: clamp(23px, 3.13vw, 33px);
+  --line-width: calc(
+    var(--point-gap) + var(--point-gap) + var(--point-gap) + var(--point-gap) + var(--point-gap) +
+      var(--point-gap) + var(--point-gap) + var(--point-gap)
+  );
+  --line-height: calc(
+    var(--point-gap) + var(--point-gap) + var(--point-gap) + var(--point-gap) + var(--point-gap) +
+      var(--point-gap) + var(--point-gap) + var(--point-gap) + var(--point-gap)
+  );
   position: relative;
-  display: grid;
-  grid-template-columns: repeat(9, 1fr);
-  grid-template-rows: repeat(10, 1fr);
-  aspect-ratio: 9 / 10;
+  width: calc(var(--line-width) + var(--board-pad) + var(--board-pad));
+  height: calc(var(--line-height) + var(--board-pad) + var(--board-pad));
   border: 2px solid #4f321f;
+  border-radius: 4px;
   background:
-    linear-gradient(#4f321f 0 0) 0 0 / 100% 2px,
-    linear-gradient(#4f321f 0 0) 0 100% / 100% 2px,
-    linear-gradient(90deg, #4f321f 0 0) 0 0 / 2px 100%,
-    linear-gradient(90deg, #4f321f 0 0) 100% 0 / 2px 100%,
-    repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), rgba(79, 50, 31, 0.72) calc(12.5% - 1px) calc(12.5% + 1px), transparent calc(12.5% + 1px) 12.5%),
-    repeating-linear-gradient(180deg, transparent 0 calc(11.111% - 1px), rgba(79, 50, 31, 0.72) calc(11.111% - 1px) calc(11.111% + 1px), transparent calc(11.111% + 1px) 11.111%),
-    #d19a59;
-  background-repeat: no-repeat;
+    radial-gradient(circle at 22% 18%, rgba(255, 234, 179, 0.34), transparent 34%),
+    linear-gradient(90deg, rgba(88, 52, 24, 0.08), transparent 18%, rgba(255, 255, 255, 0.07) 42%, transparent 70%),
+    #d39a58;
   overflow: hidden;
 }
 
-.janggiBoard::before,
-.janggiBoard::after {
-  content: "";
+.boardLines {
   position: absolute;
-  left: 33.333%;
-  width: 33.333%;
-  height: 20%;
+  left: var(--board-pad);
+  top: var(--board-pad);
+  width: var(--line-width);
+  height: var(--line-height);
+  overflow: visible;
   pointer-events: none;
-  background:
-    linear-gradient(32deg, transparent calc(50% - 1px), #4f321f calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
-    linear-gradient(148deg, transparent calc(50% - 1px), #4f321f calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px));
+  z-index: 0;
 }
 
-.janggiBoard::before {
-  top: 0;
+.boardLines line {
+  stroke: rgba(70, 43, 24, 0.82);
+  stroke-width: 1.45;
+  stroke-linecap: round;
 }
 
-.janggiBoard::after {
-  bottom: 0;
-}
-
-.cell {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  min-width: 0;
-  aspect-ratio: 1 / 1;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  z-index: 1;
-}
-
-.cell::after {
-  content: "";
+.intersectionPoint {
   position: absolute;
-  width: 26%;
-  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  place-items: center;
+  justify-content: center;
+  width: clamp(47px, 6.3vw, 67px);
+  height: clamp(47px, 6.3vw, 67px);
+  border: 0;
   border-radius: 999px;
   background: transparent;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.intersectionPoint::before,
+.intersectionPoint::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.intersectionPoint::before {
+  inset: 8%;
+  border: 0 solid transparent;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.intersectionPoint::after {
+  width: 11px;
+  height: 11px;
+  background: transparent;
+  box-shadow: none;
   transition: background 120ms ease, transform 120ms ease;
 }
 
-.cell.legalTarget::after {
-  background: rgba(38, 95, 67, 0.42);
+.intersectionPoint.legalTarget::after {
+  background: rgba(31, 132, 72, 0.78);
+  box-shadow: 0 0 0 3px rgba(235, 255, 218, 0.28), 0 2px 5px rgba(31, 68, 42, 0.3);
 }
 
-.cell.selected::after {
-  width: 74%;
-  border: 2px solid rgba(31, 88, 134, 0.76);
-  background: rgba(255, 255, 255, 0.2);
+.intersectionPoint.lastMove::before {
+  border-width: 2px;
+  border-color: rgba(246, 199, 79, 0.82);
+  box-shadow: 0 0 0 4px rgba(255, 223, 122, 0.18);
 }
 
-.cell.lastMove {
-  background: rgba(255, 236, 153, 0.23);
+.intersectionPoint.selected::before {
+  border-width: 3px;
+  border-color: rgba(36, 106, 178, 0.88);
+  box-shadow: 0 0 0 5px rgba(99, 163, 225, 0.18);
 }
 
 .piece {
+  position: relative;
   display: grid;
   place-items: center;
-  width: min(76%, 56px);
-  aspect-ratio: 1;
-  border: 2px solid rgba(70, 45, 27, 0.5);
+  width: var(--piece-size);
+  height: var(--piece-size);
+  border: 2px solid rgba(83, 54, 32, 0.62);
   border-radius: 999px;
   background:
-    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.86), rgba(255, 244, 217, 0.24) 34%, transparent 35%),
-    #f7dfad;
-  box-shadow: inset 0 -4px 8px rgba(70, 45, 27, 0.18), 0 6px 10px rgba(50, 32, 18, 0.2);
-  font-size: clamp(1.2rem, 4.4vw, 2rem);
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.95), rgba(255, 249, 225, 0.44) 30%, transparent 31%),
+    radial-gradient(circle at 50% 56%, #f4dfae 0 48%, #dfbf7d 78%, #aa7b40 100%);
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 246, 213, 0.66),
+    inset 0 -6px 10px rgba(88, 54, 26, 0.24),
+    inset 0 5px 8px rgba(255, 255, 255, 0.38),
+    0 8px 14px rgba(48, 31, 17, 0.28);
+  font-family: "Nanum Myeongjo", "Batang", "Songti SC", "Noto Serif CJK KR", serif;
+  font-size: clamp(1.24rem, 3.8vw, 2.05rem);
   font-weight: 900;
   line-height: 1;
+  text-shadow: 0 1px 0 rgba(255, 247, 218, 0.75);
+  z-index: 1;
+}
+
+.piece::after {
+  content: "";
+  position: absolute;
+  inset: 14%;
+  border: 1px solid rgba(92, 57, 28, 0.24);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .piece.cho {
@@ -336,9 +377,19 @@ select {
     padding: 8px;
   }
 
+  .janggiBoard {
+    --point-gap: clamp(35px, 10.1vw, 52px);
+    --piece-size: clamp(26px, 7.25vw, 37px);
+    --board-pad: clamp(16px, 4.5vw, 23px);
+  }
+
+  .intersectionPoint {
+    width: clamp(32px, 9.1vw, 47px);
+    height: clamp(32px, 9.1vw, 47px);
+  }
+
   .piece {
-    width: 82%;
-    font-size: clamp(1rem, 7vw, 1.45rem);
+    font-size: clamp(0.9rem, 5.1vw, 1.34rem);
   }
 
   .controlRail {
