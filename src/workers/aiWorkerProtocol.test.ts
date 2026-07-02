@@ -14,7 +14,14 @@ describe('AI worker protocol', () => {
     const request = createAiSearchRequest(
       state,
       'hard',
-      { enableQuiescence: false, maxQuiescenceDepth: 2, useOpeningBook: true, openingBook: builtInOpeningBook, table: undefined },
+      {
+        enableQuiescence: false,
+        maxQuiescenceDepth: 2,
+        useOpeningBook: true,
+        openingBook: builtInOpeningBook,
+        maxCandidates: 3,
+        table: undefined
+      },
       'request-1'
     );
 
@@ -30,7 +37,8 @@ describe('AI worker protocol', () => {
       useOpeningBook: true,
       openingBook: builtInOpeningBook,
       openingBookContext: undefined,
-      maxBookPly: undefined
+      maxBookPly: undefined,
+      maxCandidates: 3
     });
     expect('table' in request.options!).toBe(false);
   });

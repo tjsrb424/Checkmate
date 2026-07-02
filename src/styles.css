@@ -348,6 +348,105 @@ select {
   background: rgba(231, 226, 216, 0.7);
 }
 
+.analysisPanel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 252, 245, 0.82);
+}
+
+.analysisHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.analysisHeader button {
+  min-height: 34px;
+  padding-inline: 10px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 6px;
+  color: #243044;
+  background: rgba(255, 255, 255, 0.64);
+  cursor: pointer;
+}
+
+.analysisHeader button:disabled {
+  color: #9aa3b2;
+  cursor: not-allowed;
+}
+
+.analysisBody {
+  display: grid;
+  gap: 10px;
+}
+
+.analysisStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.analysisStats span {
+  padding: 3px 6px;
+  border-radius: 5px;
+  color: #374151;
+  background: rgba(38, 56, 77, 0.08);
+  font-size: 0.75rem;
+  font-weight: 760;
+}
+
+.candidateList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.candidateList li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  color: #374151;
+}
+
+.candidateList strong {
+  color: #7b4f2f;
+  font-size: 0.78rem;
+}
+
+.candidateList code {
+  color: #182232;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.candidateList span {
+  color: #243044;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: right;
+}
+
+.analysisEmpty,
+.analysisError {
+  margin: 0;
+  color: #657186;
+  font-size: 0.8rem;
+}
+
+.analysisError {
+  color: #a23b30;
+}
+
 .moveList {
   display: grid;
   gap: 8px;

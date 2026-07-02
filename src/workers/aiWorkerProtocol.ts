@@ -11,6 +11,7 @@ export type SerializableSearchOptions = Pick<
   | 'openingBook'
   | 'openingBookContext'
   | 'maxBookPly'
+  | 'maxCandidates'
 >;
 
 export interface AiSearchRequest {
@@ -89,7 +90,8 @@ function toSerializableSearchOptions(options: SearchOptions): SerializableSearch
     useOpeningBook: options.useOpeningBook,
     openingBook: options.openingBook,
     openingBookContext: options.openingBookContext,
-    maxBookPly: options.maxBookPly
+    maxBookPly: options.maxBookPly,
+    maxCandidates: options.maxCandidates
   };
 }
 

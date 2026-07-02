@@ -5,8 +5,10 @@ import {
   Formation,
   GameState,
   Move,
+  type PositionAnalysis,
   Position,
   Side,
+  analyzePosition,
   applyMove,
   builtInOpeningBook,
   canRedoMove,
@@ -67,9 +69,9 @@ const boardSeatLabels: Record<BoardSeat, string> = {
 };
 
 const difficultyLabels: Record<Difficulty, string> = {
-  easy: '쉬움',
-  normal: '보통',
-  hard: '어려움'
+  easy: '초급',
+  normal: '중급',
+  hard: '고급 실험'
 };
 
 const formationOptions: Formation[] = ['inner-elephant', 'outer-elephant', 'left-elephant', 'right-elephant'];
@@ -97,6 +99,9 @@ export default function App() {
   const [aiThinking, setAiThinking] = useState(false);
   const [lastSearch, setLastSearch] = useState('');
   const [aiError, setAiError] = useState('');
+  const [analysis, setAnalysis] = useState<PositionAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState('');
+  const [analysisThinking, setAnalysisThinking] = useState(false);
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef<string | null>(null);
   const gameRef = useRef(game);
@@ -133,7 +138,8 @@ export default function App() {
         minPlayCount: 2,
         maxMoves: 5
       },
-      maxBookPly: 16
+      maxBookPly: 16,
+      maxCandidates: 5
     });
     const worker = new Worker(new URL('./workers/aiWorker.ts', import.meta.url), { type: 'module' });
     let searchStarted = false;
@@ -198,6 +204,8 @@ export default function App() {
       setRedoStack([]);
       setLastSearch(formatSearchSummary(response.result));
       setSelected(null);
+      setAnalysis(null);
+      setAnalysisError('');
       finishWorker();
     };
 
@@ -230,6 +238,8 @@ export default function App() {
     setRedoStack([]);
     setLastSearch('');
     setAiError('');
+    setAnalysis(null);
+    setAnalysisError('');
   }
 
   function initialBoardForCurrentGame() {
@@ -244,6 +254,8 @@ export default function App() {
     setRedoStack((current) => [undoneMove, ...current]);
     setSelected(null);
     setAiError('');
+    setAnalysis(null);
+    setAnalysisError('');
   }
 
   function undoUntilHumanTurn() {
@@ -255,6 +267,8 @@ export default function App() {
     setRedoStack((current) => [...undoneMoves, ...current]);
     setSelected(null);
     setAiError('');
+    setAnalysis(null);
+    setAnalysisError('');
   }
 
   function redoMove() {
@@ -271,6 +285,8 @@ export default function App() {
     setRedoStack(remaining);
     setSelected(null);
     setAiError('');
+    setAnalysis(null);
+    setAnalysisError('');
   }
 
   function handleCellClick(pos: Position) {
@@ -291,6 +307,38 @@ export default function App() {
     setRedoStack([]);
     setSelected(null);
     setAiError('');
+    setAnalysis(null);
+    setAnalysisError('');
+  }
+
+  function analyzeCurrentPosition() {
+    if (aiThinking || analysisThinking) return;
+    setAnalysisThinking(true);
+    setAnalysisError('');
+    try {
+      setAnalysis(
+        analyzePosition(game, {
+          limits: { maxDepth: 3, timeMs: 1500 },
+          maxCandidates: 5,
+          searchOptions: {
+            useOpeningBook,
+            openingBook: useOpeningBook ? builtInOpeningBook : undefined,
+            openingBookContext: {
+              choFormation: gameStartConfig.choFormation,
+              hanFormation: gameStartConfig.hanFormation,
+              minPlayCount: 2,
+              maxMoves: 5
+            },
+            maxBookPly: 16
+          }
+        })
+      );
+    } catch (error) {
+      setAnalysis(null);
+      setAnalysisError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAnalysisThinking(false);
+    }
   }
 
   return (
@@ -440,6 +488,14 @@ export default function App() {
               </button>
             </div>
 
+            <AnalysisPanel
+              analysis={analysis}
+              error={analysisError}
+              thinking={analysisThinking}
+              disabled={aiThinking}
+              onAnalyze={analyzeCurrentPosition}
+            />
+
             <MoveList history={game.history} humanSide={humanSide} />
           </aside>
         </div>
@@ -577,6 +633,56 @@ function displayToBoard(pos: Position, humanSide: Side, humanSeat: BoardSeat): P
   const shouldRotate = humanSeat === 'bottom' ? humanSide === 'HAN' : humanSide === 'CHO';
   if (!shouldRotate) return pos;
   return { x: 8 - pos.x, y: 9 - pos.y };
+}
+
+function AnalysisPanel({
+  analysis,
+  error,
+  thinking,
+  disabled,
+  onAnalyze
+}: {
+  analysis: PositionAnalysis | null;
+  error: string;
+  thinking: boolean;
+  disabled: boolean;
+  onAnalyze: () => void;
+}) {
+  return (
+    <div className="analysisPanel">
+      <div className="analysisHeader">
+        <span className="groupLabel">AI 분석</span>
+        <button onClick={onAnalyze} disabled={disabled || thinking}>
+          {thinking ? '분석 중' : '현재 포지션 분석'}
+        </button>
+      </div>
+      {error && <p className="analysisError">{error}</p>}
+      {analysis ? (
+        <div className="analysisBody">
+          <div className="analysisStats">
+            <span>{sideLabels[analysis.turn]} 차례</span>
+            <span>{analysis.source}</span>
+            <span>깊이 {analysis.depth || 1}</span>
+            <span>평가 {Math.round(analysis.score)}</span>
+            <span>노드 {analysis.nodes}</span>
+            <span>Q {analysis.qNodes}</span>
+            <span>NPS {analysis.nps}</span>
+          </div>
+          <ol className="candidateList">
+            {analysis.candidates.slice(0, 5).map((candidate, index) => (
+              <li key={`${moveKey(candidate.move)}-${index}`}>
+                <strong>{index + 1}</strong>
+                <code>{formatMoveWithPiece(candidate.move, candidate.move.piece)}</code>
+                <span>{Math.round(candidate.score)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : (
+        <p className="analysisEmpty">후보수와 평가값을 확인할 수 있습니다.</p>
+      )}
+    </div>
+  );
 }
 
 function getGameStatusLabel(game: GameState, checkSide: Side | null, aiThinking: boolean, aiError: string): string {

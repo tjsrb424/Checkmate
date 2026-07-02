@@ -10,6 +10,7 @@ import {
   generateLegalMoves,
   isCheckmate,
   MATE_SCORE,
+  difficultyLimits,
   searchBestMove,
   setPiece,
   TranspositionTable
@@ -113,6 +114,18 @@ describe('AI search stability', () => {
     expect(result.quiescenceEnabled).toBe(true);
   });
 
+  it('returns sorted root candidates with the best move first', () => {
+    const state = createGameState(nodeCountBoard(), 'CHO');
+    const result = searchBestMove(state, { maxDepth: 2, timeMs: 1000 }, { maxCandidates: 3 });
+
+    expect(result.candidates).toBeDefined();
+    expect(result.candidates?.length).toBeLessThanOrEqual(3);
+    expect(result.candidates?.[0].move).toEqual(result.move);
+    for (let i = 1; i < (result.candidates?.length ?? 0); i += 1) {
+      expect(result.candidates![i - 1].score).toBeGreaterThanOrEqual(result.candidates![i].score);
+    }
+  });
+
   it('gets transposition hits when a table is reused', () => {
     const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
     const table = new TranspositionTable();
@@ -153,6 +166,25 @@ describe('AI search stability', () => {
     expect(result.nodes).toBe(0);
     expect(result.pv[0]).toEqual(bookMove.move);
     expect(result.bookMove).toEqual(bookMove);
+    expect(result.candidates?.[0]).toMatchObject({
+      move: bookMove.move,
+      source: 'book',
+      depth: 0
+    });
+  });
+
+  it('applies maxCandidates to opening book results', () => {
+    const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
+    const result = searchBestMove(state, { maxDepth: 2, timeMs: 1000 }, {
+      useOpeningBook: true,
+      openingBook: builtInOpeningBook,
+      openingBookContext: { minPlayCount: 1 },
+      maxCandidates: 1
+    });
+
+    expect(result.source).toBe('book');
+    expect(result.candidates).toHaveLength(1);
+    expect(result.bookCandidates).toHaveLength(1);
   });
 
   it('falls back to search when the opening book is unavailable or too late', () => {
@@ -214,5 +246,10 @@ describe('AI search stability', () => {
 
     expect(result.source).toBe('search');
     expect(result.nodes).toBeGreaterThan(0);
+  });
+
+  it('keeps hard difficulty at a deeper experimental setting', () => {
+    expect(difficultyLimits.hard.maxDepth).toBeGreaterThanOrEqual(5);
+    expect(difficultyLimits.hard.timeMs).toBeGreaterThanOrEqual(4000);
   });
 });

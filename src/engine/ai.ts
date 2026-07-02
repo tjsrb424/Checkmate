@@ -16,9 +16,9 @@ export const MATE_SCORE = 1_000_000;
 export const DRAW_SCORE = 0;
 
 export const difficultyLimits: Record<Difficulty, SearchLimits> = {
-  easy: { maxDepth: 2, timeMs: 450 },
-  normal: { maxDepth: 3, timeMs: 1100 },
-  hard: { maxDepth: 4, timeMs: 2400 }
+  easy: { maxDepth: 2, timeMs: 500 },
+  normal: { maxDepth: 3, timeMs: 1500 },
+  hard: { maxDepth: 5, timeMs: 5000 }
 };
 
 interface SearchContext {
@@ -38,6 +38,15 @@ interface SearchContext {
   maxQuiescenceDepth: number;
   includeQuietChecks: boolean;
   rootMoveHint?: Move;
+  maxCandidates: number;
+}
+
+export interface SearchCandidate {
+  move: Move;
+  score: number;
+  depth: number;
+  source: 'book' | 'search';
+  pv: Move[];
 }
 
 export interface SearchResult {
@@ -56,6 +65,7 @@ export interface SearchResult {
   qCutoffs: number;
   quiescenceEnabled: boolean;
   source: 'book' | 'search';
+  candidates?: SearchCandidate[];
   bookMove?: OpeningBookMove;
   bookCandidates?: OpeningBookMove[];
 }
@@ -71,6 +81,7 @@ export interface SearchOptions {
   openingBook?: OpeningBook;
   openingBookContext?: OpeningBookLookupOptions;
   maxBookPly?: number;
+  maxCandidates?: number;
 }
 
 export function chooseBestMove(state: GameState, difficulty: Difficulty): SearchResult {
@@ -100,11 +111,13 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
     enableTransposition,
     enableQuiescence,
     maxQuiescenceDepth: options.maxQuiescenceDepth ?? 6,
-    includeQuietChecks: options.includeQuietChecks ?? true
+    includeQuietChecks: options.includeQuietChecks ?? true,
+    maxCandidates: options.maxCandidates ?? 5
   };
   let bestMove: Move | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
   let completedDepth = 0;
+  let completedCandidates: SearchCandidate[] = [];
 
   for (let depth = 1; depth <= limits.maxDepth; depth += 1) {
     const result = searchRoot(state, depth, context);
@@ -114,17 +127,22 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
       bestScore = result.score;
       completedDepth = depth;
       context.rootMoveHint = result.move;
+      completedCandidates = result.candidates ?? [];
     }
   }
 
   if (!bestMove) {
     const legalMoves = orderMoves(state, generateLegalMoves(state), context);
-    bestMove = legalMoves[0] ?? null;
+    bestMove = legalMoves[0] ? withMovePiece(state, legalMoves[0]) : null;
     bestScore = bestMove ? evaluatePosition(applyMove(state, bestMove, false), state.turn) : 0;
+    completedCandidates = bestMove
+      ? [{ move: bestMove, score: bestScore, depth: completedDepth, source: 'search', pv: [bestMove] }]
+      : [];
   }
 
   const elapsedMs = Math.max(0, performance.now() - context.startedAt);
   const pv = bestMove && table ? extractPrincipalVariation(state, table, Math.max(1, completedDepth)) : bestMove ? [bestMove] : [];
+  const candidates = alignBestCandidatePv(completedCandidates, bestMove, pv).slice(0, context.maxCandidates);
   return {
     move: bestMove,
     score: bestScore,
@@ -140,7 +158,8 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
     qNodes: context.qNodes,
     qCutoffs: context.qCutoffs,
     quiescenceEnabled: context.enableQuiescence,
-    source: 'search'
+    source: 'search',
+    candidates
   };
 }
 
@@ -149,15 +168,18 @@ function searchRoot(state: GameState, depth: number, context: SearchContext): Se
   let bestMove: Move | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
   let alpha = Number.NEGATIVE_INFINITY;
+  const candidates: SearchCandidate[] = [];
 
   for (const move of moves) {
     if (isTimedOut(context)) break;
     const next = applyMove(state, move, false);
     const result = -negamax(next, depth - 1, Number.NEGATIVE_INFINITY, -alpha, context, 1);
     if (context.timedOut) break;
+    const candidateMove = withMovePiece(state, move);
+    candidates.push({ move: candidateMove, score: result, depth, source: 'search', pv: [candidateMove] });
     if (result > bestScore) {
       bestScore = result;
-      bestMove = move;
+      bestMove = candidateMove;
     }
     alpha = Math.max(alpha, bestScore);
   }
@@ -181,7 +203,8 @@ function searchRoot(state: GameState, depth: number, context: SearchContext): Se
     qNodes: context.qNodes,
     qCutoffs: context.qCutoffs,
     quiescenceEnabled: context.enableQuiescence,
-    source: 'search'
+    source: 'search',
+    candidates: candidates.sort(compareCandidates).slice(0, context.maxCandidates)
   };
 }
 
@@ -191,17 +214,24 @@ function tryOpeningBookMove(state: GameState, options: SearchOptions): SearchRes
 
   const candidates = lookupOpeningMoves(options.openingBook, state, {
     ...options.openingBookContext,
-    maxMoves: options.openingBookContext?.maxMoves ?? 5
+    maxMoves: options.openingBookContext?.maxMoves ?? options.maxCandidates ?? 5
   });
   const bookMove = candidates[0];
   if (!bookMove || !isLegalMove(state, bookMove.move)) return null;
+  const searchCandidates = candidates.slice(0, options.maxCandidates ?? 5).map((candidate) => ({
+    move: withMovePiece(state, candidate.move),
+    score: Math.round(candidate.bookScore * 1000),
+    depth: 0,
+    source: 'book' as const,
+    pv: [withMovePiece(state, candidate.move)]
+  }));
 
   return {
-    move: bookMove.move,
+    move: withMovePiece(state, bookMove.move),
     score: Math.round(bookMove.bookScore * 1000),
     depth: 0,
     nodes: 0,
-    pv: [bookMove.move],
+    pv: [withMovePiece(state, bookMove.move)],
     ttHits: 0,
     ttMisses: 0,
     ttStores: 0,
@@ -212,8 +242,28 @@ function tryOpeningBookMove(state: GameState, options: SearchOptions): SearchRes
     qCutoffs: 0,
     quiescenceEnabled: options.enableQuiescence !== false,
     source: 'book',
+    candidates: searchCandidates,
     bookMove,
-    bookCandidates: candidates.slice(0, 5)
+    bookCandidates: candidates.slice(0, options.maxCandidates ?? 5)
+  };
+}
+
+function compareCandidates(a: SearchCandidate, b: SearchCandidate): number {
+  return b.score - a.score;
+}
+
+function alignBestCandidatePv(candidates: SearchCandidate[], bestMove: Move | null, pv: Move[]): SearchCandidate[] {
+  if (!bestMove) return candidates;
+  return candidates.map((candidate) => (sameMove(candidate.move, bestMove) ? { ...candidate, pv: pv.length > 0 ? pv : [candidate.move] } : candidate));
+}
+
+function withMovePiece(state: GameState, move: Move): Move {
+  const movingPiece = move.piece ?? state.board[move.from.y][move.from.x] ?? undefined;
+  const captured = move.captured ?? state.board[move.to.y][move.to.x] ?? undefined;
+  return {
+    ...move,
+    ...(movingPiece ? { piece: movingPiece } : {}),
+    ...(captured ? { captured } : {})
   };
 }
 

@@ -8,6 +8,8 @@ export * from './history';
 export * from './arena';
 export * from './openingBook';
 export * from './openingBookData';
+export * from './analysis';
+export * from './moveText';
 export * from './perft';
 export * from './hash';
 export * from './transposition';
