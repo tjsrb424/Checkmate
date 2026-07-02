@@ -489,7 +489,7 @@ function BoardView({
               aria-label={`${board.x},${board.y}`}
             >
               {piece && (
-                <span className={`piece ${piece.side.toLowerCase()}`}>
+                <span className={`piece ${piece.side.toLowerCase()} ${piece.kind.toLowerCase()}`}>
                   {pieceLabels[piece.side][piece.kind]}
                 </span>
               )}

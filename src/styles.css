@@ -218,8 +218,8 @@ h1 {
   position: relative;
   display: grid;
   place-items: center;
-  width: var(--piece-size);
-  height: var(--piece-size);
+  width: var(--actual-piece-size, var(--piece-size));
+  height: var(--actual-piece-size, var(--piece-size));
   border: 2px solid rgba(83, 54, 32, 0.62);
   border-radius: 999px;
   background:
@@ -236,6 +236,17 @@ h1 {
   line-height: 1;
   text-shadow: 0 1px 0 rgba(255, 247, 218, 0.75);
   z-index: 1;
+}
+
+.piece.general {
+  --actual-piece-size: calc(var(--piece-size) * 1.12);
+  font-size: clamp(1.42rem, 4.22vw, 2.28rem);
+}
+
+.piece.guard,
+.piece.soldier {
+  --actual-piece-size: calc(var(--piece-size) * 0.76);
+  font-size: clamp(0.98rem, 2.86vw, 1.5rem);
 }
 
 .piece::after {
