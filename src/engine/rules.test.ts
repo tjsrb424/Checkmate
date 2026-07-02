@@ -43,6 +43,18 @@ function repeatedPositionBoard(): Board {
   return board;
 }
 
+function homePattern(board: Board, side: Side): string {
+  const y = side === 'CHO' ? 9 : 0;
+  return [1, 2, 6, 7]
+    .map((x) => {
+      const kind = board[y][x]?.kind;
+      if (kind === 'ELEPHANT') return '상';
+      if (kind === 'HORSE') return '마';
+      return '?';
+    })
+    .join('');
+}
+
 function stateKey(game: GameState): string {
   return hashToKey(computeZobristHash(game));
 }
@@ -61,14 +73,24 @@ describe('initial formations', () => {
     expect(inner[0][7]?.kind).toBe('ELEPHANT');
 
     const left = createInitialBoard('left-elephant', 'right-elephant');
-    expect(left[9][1]?.kind).toBe('HORSE');
-    expect(left[9][2]?.kind).toBe('ELEPHANT');
-    expect(left[9][6]?.kind).toBe('HORSE');
-    expect(left[9][7]?.kind).toBe('ELEPHANT');
-    expect(left[0][1]?.kind).toBe('ELEPHANT');
-    expect(left[0][2]?.kind).toBe('HORSE');
-    expect(left[0][6]?.kind).toBe('ELEPHANT');
-    expect(left[0][7]?.kind).toBe('HORSE');
+    expect(left[9][1]?.kind).toBe('ELEPHANT');
+    expect(left[9][2]?.kind).toBe('HORSE');
+    expect(left[9][6]?.kind).toBe('ELEPHANT');
+    expect(left[9][7]?.kind).toBe('HORSE');
+    expect(left[0][1]?.kind).toBe('HORSE');
+    expect(left[0][2]?.kind).toBe('ELEPHANT');
+    expect(left[0][6]?.kind).toBe('HORSE');
+    expect(left[0][7]?.kind).toBe('ELEPHANT');
+  });
+
+  it('uses bottom-view left and right elephant labels for both sides', () => {
+    const left = createInitialBoard('left-elephant', 'left-elephant');
+    const right = createInitialBoard('right-elephant', 'right-elephant');
+
+    expect(homePattern(left, 'CHO')).toBe('상마상마');
+    expect(homePattern(left, 'HAN')).toBe('상마상마');
+    expect(homePattern(right, 'CHO')).toBe('마상마상');
+    expect(homePattern(right, 'HAN')).toBe('마상마상');
   });
 });
 

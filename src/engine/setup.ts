@@ -21,16 +21,16 @@ const formationHomePieces: Record<Formation, Record<number, PieceKind>> = {
     7: 'ELEPHANT'
   },
   'left-elephant': {
-    1: 'HORSE',
-    2: 'ELEPHANT',
-    6: 'HORSE',
-    7: 'ELEPHANT'
-  },
-  'right-elephant': {
     1: 'ELEPHANT',
     2: 'HORSE',
     6: 'ELEPHANT',
     7: 'HORSE'
+  },
+  'right-elephant': {
+    1: 'HORSE',
+    2: 'ELEPHANT',
+    6: 'HORSE',
+    7: 'ELEPHANT'
   }
 };
 

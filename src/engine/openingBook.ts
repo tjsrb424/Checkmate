@@ -104,8 +104,8 @@ export interface OpeningBookLookupOptions {
 type OutcomeForSide = 'win' | 'loss' | 'draw' | 'unknown';
 
 const chalimByFormation: Record<Formation, string> = {
-  'left-elephant': '마상마상',
-  'right-elephant': '상마상마',
+  'left-elephant': '상마상마',
+  'right-elephant': '마상마상',
   'inner-elephant': '마상상마',
   'outer-elephant': '상마마상'
 };
