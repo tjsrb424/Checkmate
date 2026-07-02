@@ -12,6 +12,7 @@ import {
   samePosition
 } from './types';
 import { generateLegalMoves, generatePseudoMoves, isInCheck, isInPalace, pieceMoves, findGeneral } from './rules';
+import { analyzePositionSafety } from './tacticalSafety';
 
 const MOBILITY_WEIGHT = 7;
 
@@ -44,6 +45,7 @@ export interface EvaluationBreakdown {
   horseElephantActivity: number;
   soldierStructure: number;
   checkPressure: number;
+  tacticalSafety: number;
   total: number;
 }
 
@@ -63,6 +65,7 @@ export function evaluatePositionBreakdown(state: GameState, side: Side): Evaluat
   const horseElephantActivity = activityPairScore(state.board, side, horseElephantActivityForPiece);
   const soldierStructure = activityPairScore(state.board, side, soldierStructureForPiece);
   const checkPressure = checkPressureFor(state.board, side) - checkPressureFor(state.board, enemy);
+  const tacticalSafety = tacticalSafetyFor(state, side) - tacticalSafetyFor(state, enemy);
   const total =
     material +
     positional +
@@ -73,7 +76,8 @@ export function evaluatePositionBreakdown(state: GameState, side: Side): Evaluat
     cannonActivity +
     horseElephantActivity +
     soldierStructure +
-    checkPressure;
+    checkPressure +
+    tacticalSafety;
 
   return {
     material,
@@ -86,6 +90,7 @@ export function evaluatePositionBreakdown(state: GameState, side: Side): Evaluat
     horseElephantActivity,
     soldierStructure,
     checkPressure,
+    tacticalSafety,
     total
   };
 }
@@ -122,7 +127,8 @@ export function formatEvaluationBreakdown(breakdown: EvaluationBreakdown): strin
     `cannon=${breakdown.cannonActivity}`,
     `horseElephant=${breakdown.horseElephantActivity}`,
     `soldier=${breakdown.soldierStructure}`,
-    `check=${breakdown.checkPressure}`
+    `check=${breakdown.checkPressure}`,
+    `tacticalSafety=${breakdown.tacticalSafety}`
   ].join(' ');
 }
 
@@ -273,6 +279,19 @@ function checkPressureFor(board: Board, side: Side): number {
   }).length;
 
   return score + Math.min(6, pseudoChecks) * 18;
+}
+
+function tacticalSafetyFor(state: GameState, side: Side): number {
+  const safety = analyzePositionSafety(state, side);
+  let score = safety.immediateMateThreat ? -5000 : 0;
+  for (const hanging of safety.hangingPieces) {
+    if (hanging.piece.kind === 'CHARIOT') score -= Math.min(1500, Math.max(800, hanging.estimatedLoss));
+    else if (hanging.piece.kind === 'CANNON') score -= Math.min(900, Math.max(500, hanging.estimatedLoss));
+    else if (hanging.piece.kind === 'HORSE' || hanging.piece.kind === 'ELEPHANT') {
+      score -= Math.min(500, Math.max(200, hanging.estimatedLoss));
+    }
+  }
+  return score;
 }
 
 function piecePairScore(

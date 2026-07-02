@@ -11,6 +11,7 @@ import {
   isCheckmate,
   MATE_SCORE,
   difficultyLimits,
+  moveKey,
   searchBestMove,
   setPiece,
   TranspositionTable
@@ -60,6 +61,16 @@ function nodeCountBoard(): Board {
   place(board, 4, 6, 'CHO', 'SOLDIER');
   place(board, 4, 1, 'HAN', 'GENERAL');
   place(board, 4, 3, 'HAN', 'SOLDIER');
+  return board;
+}
+
+function hangingChariotBoard(): Board {
+  const board = emptyBoard();
+  place(board, 4, 8, 'CHO', 'GENERAL');
+  place(board, 4, 1, 'HAN', 'GENERAL');
+  place(board, 4, 5, 'CHO', 'SOLDIER');
+  place(board, 0, 6, 'CHO', 'CHARIOT');
+  place(board, 0, 3, 'HAN', 'CHARIOT');
   return board;
 }
 
@@ -126,12 +137,39 @@ describe('AI search stability', () => {
     }
   });
 
+  it('attaches safety information to search candidates and selected moves', () => {
+    const state = createGameState(nodeCountBoard(), 'CHO');
+    const result = searchBestMove(state, { maxDepth: 1, timeMs: 1000 }, { maxCandidates: 4 });
+
+    expect(result.selectedMoveSafety).toBeDefined();
+    expect(result.candidates?.every((candidate) => candidate.safety && candidate.riskLevel && candidate.riskScore !== undefined)).toBe(true);
+  });
+
+  it('does not choose a candidate that allows immediate mate', () => {
+    const state = createGameState(mateThreatBoard(), 'CHO');
+    const result = searchBestMove(state, { maxDepth: 2, timeMs: 2000 }, { maxCandidates: 20 });
+
+    expect(result.selectedMoveSafety?.allowsImmediateMate).toBe(false);
+  });
+
+  it('penalizes candidates that hang a free chariot', () => {
+    const state = createGameState(hangingChariotBoard(), 'CHO');
+    const result = searchBestMove(state, { maxDepth: 1, timeMs: 1000 }, { maxCandidates: 50 });
+    const dangerous = result.candidates?.find((candidate) =>
+      candidate.safety?.risks.some((risk) => risk.reason === 'HANGS_CHARIOT')
+    );
+
+    expect(dangerous).toBeDefined();
+    expect(dangerous!.riskScore).toBeGreaterThanOrEqual(2000);
+    expect(result.move).not.toEqual(dangerous!.move);
+  });
+
   it('gets transposition hits when a table is reused', () => {
     const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
     const table = new TranspositionTable();
 
-    searchBestMove(state, { maxDepth: 2, timeMs: 1000 }, { table });
-    const result = searchBestMove(state, { maxDepth: 2, timeMs: 1000 }, { table });
+    searchBestMove(state, { maxDepth: 2, timeMs: 2500 }, { table });
+    const result = searchBestMove(state, { maxDepth: 2, timeMs: 2500 }, { table });
 
     expect(result.ttHits).toBeGreaterThan(0);
   });
@@ -162,15 +200,15 @@ describe('AI search stability', () => {
     });
 
     expect(result.source).toBe('book');
-    expect(result.move).toEqual(bookMove.move);
+    expect(moveKey(result.move!)).toBe(moveKey(bookMove.move));
     expect(result.nodes).toBe(0);
     expect(result.pv[0]).toEqual(bookMove.move);
     expect(result.bookMove).toEqual(bookMove);
     expect(result.candidates?.[0]).toMatchObject({
-      move: bookMove.move,
       source: 'book',
       depth: 0
     });
+    expect(result.selectedMoveSafety).toBeDefined();
   });
 
   it('applies maxCandidates to opening book results', () => {

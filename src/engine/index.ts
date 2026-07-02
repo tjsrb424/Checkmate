@@ -10,6 +10,7 @@ export * from './openingBook';
 export * from './openingBookData';
 export * from './analysis';
 export * from './moveText';
+export * from './tacticalSafety';
 export * from './perft';
 export * from './hash';
 export * from './transposition';

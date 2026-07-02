@@ -34,7 +34,8 @@ function withoutTotal(breakdown: EvaluationBreakdown): number {
     breakdown.cannonActivity +
     breakdown.horseElephantActivity +
     breakdown.soldierStructure +
-    breakdown.checkPressure
+    breakdown.checkPressure +
+    breakdown.tacticalSafety
   );
 }
 
@@ -141,5 +142,37 @@ describe('evaluation breakdown', () => {
     expect(evaluatePositionBreakdown(createGameState(developed, 'CHO'), 'CHO').horseElephantActivity).toBeGreaterThan(
       evaluatePositionBreakdown(createGameState(blocked, 'CHO'), 'CHO').horseElephantActivity
     );
+  });
+
+  it('penalizes a hanging chariot in tactical safety', () => {
+    const board = baseBoard();
+    place(board, 0, 6, 'CHO', 'CHARIOT');
+    place(board, 1, 6, 'HAN', 'SOLDIER');
+    const state = createGameState(board, 'CHO');
+
+    expect(evaluatePositionBreakdown(state, 'CHO').tacticalSafety).toBeLessThan(0);
+  });
+
+  it('rewards an enemy hanging chariot in tactical safety', () => {
+    const board = baseBoard();
+    place(board, 0, 6, 'HAN', 'CHARIOT');
+    place(board, 1, 6, 'CHO', 'SOLDIER');
+    const state = createGameState(board, 'CHO');
+
+    expect(evaluatePositionBreakdown(state, 'CHO').tacticalSafety).toBeGreaterThan(0);
+  });
+
+  it('strongly penalizes immediate mate threats', () => {
+    const board = emptyBoard();
+    place(board, 3, 9, 'CHO', 'GENERAL');
+    place(board, 3, 8, 'CHO', 'GUARD');
+    place(board, 2, 6, 'CHO', 'CHARIOT');
+    place(board, 8, 8, 'CHO', 'SOLDIER');
+    place(board, 4, 1, 'HAN', 'GENERAL');
+    place(board, 3, 6, 'HAN', 'CHARIOT');
+    place(board, 5, 7, 'HAN', 'HORSE');
+    const state = createGameState(board, 'CHO');
+
+    expect(evaluatePositionBreakdown(state, 'CHO').tacticalSafety).toBeLessThan(-4000);
   });
 });

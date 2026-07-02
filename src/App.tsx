@@ -672,7 +672,14 @@ function AnalysisPanel({
             {analysis.candidates.slice(0, 5).map((candidate, index) => (
               <li key={`${moveKey(candidate.move)}-${index}`}>
                 <strong>{index + 1}</strong>
-                <code>{formatMoveWithPiece(candidate.move, candidate.move.piece)}</code>
+                <div>
+                  <code>{formatMoveWithPiece(candidate.move, candidate.move.piece)}</code>
+                  <small>
+                    {candidate.source} / {candidate.riskLevel ?? 'safe'}
+                    {candidate.safety?.risks[0] ? ` / ${candidate.safety.risks[0].reason}` : ''}
+                    {candidate.safety ? ` / swing ${candidate.safety.materialSwing}` : ''}
+                  </small>
+                </div>
                 <span>{Math.round(candidate.score)}</span>
               </li>
             ))}

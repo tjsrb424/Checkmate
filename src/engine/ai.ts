@@ -11,6 +11,8 @@ import { TranspositionEntry, TranspositionTable } from './transposition';
 import { evaluatePosition, pieceValues, positionalBonus } from './evaluation';
 import { lookupOpeningMoves } from './openingBook';
 import type { OpeningBook, OpeningBookLookupOptions, OpeningBookMove } from './openingBook';
+import { analyzeMoveSafety, scoreMoveSafety, formatMoveSafety } from './tacticalSafety';
+import type { MoveSafety, TacticalRiskLevel } from './tacticalSafety';
 
 export const MATE_SCORE = 1_000_000;
 export const DRAW_SCORE = 0;
@@ -39,6 +41,7 @@ interface SearchContext {
   includeQuietChecks: boolean;
   rootMoveHint?: Move;
   maxCandidates: number;
+  safetyCache: Map<string, MoveSafety>;
 }
 
 export interface SearchCandidate {
@@ -47,6 +50,9 @@ export interface SearchCandidate {
   depth: number;
   source: 'book' | 'search';
   pv: Move[];
+  safety?: MoveSafety;
+  riskLevel?: TacticalRiskLevel;
+  riskScore?: number;
 }
 
 export interface SearchResult {
@@ -66,6 +72,8 @@ export interface SearchResult {
   quiescenceEnabled: boolean;
   source: 'book' | 'search';
   candidates?: SearchCandidate[];
+  riskSummary?: string;
+  selectedMoveSafety?: MoveSafety;
   bookMove?: OpeningBookMove;
   bookCandidates?: OpeningBookMove[];
 }
@@ -112,7 +120,8 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
     enableQuiescence,
     maxQuiescenceDepth: options.maxQuiescenceDepth ?? 6,
     includeQuietChecks: options.includeQuietChecks ?? true,
-    maxCandidates: options.maxCandidates ?? 5
+    maxCandidates: options.maxCandidates ?? 5,
+    safetyCache: new Map()
   };
   let bestMove: Move | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
@@ -143,6 +152,7 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
   const elapsedMs = Math.max(0, performance.now() - context.startedAt);
   const pv = bestMove && table ? extractPrincipalVariation(state, table, Math.max(1, completedDepth)) : bestMove ? [bestMove] : [];
   const candidates = alignBestCandidatePv(completedCandidates, bestMove, pv).slice(0, context.maxCandidates);
+  const selectedMoveSafety = candidates.find((candidate) => bestMove && sameMove(candidate.move, bestMove))?.safety;
   return {
     move: bestMove,
     score: bestScore,
@@ -159,7 +169,9 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
     qCutoffs: context.qCutoffs,
     quiescenceEnabled: context.enableQuiescence,
     source: 'search',
-    candidates
+    candidates,
+    selectedMoveSafety,
+    riskSummary: selectedMoveSafety && selectedMoveSafety.riskLevel !== 'safe' ? formatMoveSafety(selectedMoveSafety) : undefined
   };
 }
 
@@ -176,9 +188,20 @@ function searchRoot(state: GameState, depth: number, context: SearchContext): Se
     const result = -negamax(next, depth - 1, Number.NEGATIVE_INFINITY, -alpha, context, 1);
     if (context.timedOut) break;
     const candidateMove = withMovePiece(state, move);
-    candidates.push({ move: candidateMove, score: result, depth, source: 'search', pv: [candidateMove] });
-    if (result > bestScore) {
-      bestScore = result;
+    const safety = getRootMoveSafety(state, candidateMove, context);
+    const adjustedScore = applySafetyPenalty(result, safety);
+    candidates.push({
+      move: candidateMove,
+      score: adjustedScore,
+      depth,
+      source: 'search',
+      pv: [candidateMove],
+      safety,
+      riskLevel: safety.riskLevel,
+      riskScore: safety.riskScore
+    });
+    if (adjustedScore > bestScore) {
+      bestScore = adjustedScore;
       bestMove = candidateMove;
     }
     alpha = Math.max(alpha, bestScore);
@@ -216,22 +239,37 @@ function tryOpeningBookMove(state: GameState, options: SearchOptions): SearchRes
     ...options.openingBookContext,
     maxMoves: options.openingBookContext?.maxMoves ?? options.maxCandidates ?? 5
   });
-  const bookMove = candidates[0];
+  const searchCandidates = candidates
+    .map((candidate) => {
+      const move = withMovePiece(state, candidate.move);
+      const safety = analyzeMoveSafety(state, move);
+      return {
+        bookMove: candidate,
+        searchCandidate: {
+          move,
+          score: applySafetyPenalty(Math.round(candidate.bookScore * 1000), safety),
+          depth: 0,
+          source: 'book' as const,
+          pv: [move],
+          safety,
+          riskLevel: safety.riskLevel,
+          riskScore: safety.riskScore
+        }
+      };
+    })
+    .sort((a, b) => compareCandidates(a.searchCandidate, b.searchCandidate))
+    .slice(0, options.maxCandidates ?? 5);
+  const bookMove = searchCandidates[0]?.bookMove;
   if (!bookMove || !isLegalMove(state, bookMove.move)) return null;
-  const searchCandidates = candidates.slice(0, options.maxCandidates ?? 5).map((candidate) => ({
-    move: withMovePiece(state, candidate.move),
-    score: Math.round(candidate.bookScore * 1000),
-    depth: 0,
-    source: 'book' as const,
-    pv: [withMovePiece(state, candidate.move)]
-  }));
+  const selectedMove = searchCandidates[0].searchCandidate.move;
+  const selectedMoveSafety = searchCandidates[0].searchCandidate.safety;
 
   return {
-    move: withMovePiece(state, bookMove.move),
-    score: Math.round(bookMove.bookScore * 1000),
+    move: selectedMove,
+    score: searchCandidates[0].searchCandidate.score,
     depth: 0,
     nodes: 0,
-    pv: [withMovePiece(state, bookMove.move)],
+    pv: [selectedMove],
     ttHits: 0,
     ttMisses: 0,
     ttStores: 0,
@@ -242,7 +280,9 @@ function tryOpeningBookMove(state: GameState, options: SearchOptions): SearchRes
     qCutoffs: 0,
     quiescenceEnabled: options.enableQuiescence !== false,
     source: 'book',
-    candidates: searchCandidates,
+    candidates: searchCandidates.map((candidate) => candidate.searchCandidate),
+    selectedMoveSafety,
+    riskSummary: selectedMoveSafety && selectedMoveSafety.riskLevel !== 'safe' ? formatMoveSafety(selectedMoveSafety) : undefined,
     bookMove,
     bookCandidates: candidates.slice(0, options.maxCandidates ?? 5)
   };
@@ -255,6 +295,21 @@ function compareCandidates(a: SearchCandidate, b: SearchCandidate): number {
 function alignBestCandidatePv(candidates: SearchCandidate[], bestMove: Move | null, pv: Move[]): SearchCandidate[] {
   if (!bestMove) return candidates;
   return candidates.map((candidate) => (sameMove(candidate.move, bestMove) ? { ...candidate, pv: pv.length > 0 ? pv : [candidate.move] } : candidate));
+}
+
+function applySafetyPenalty(score: number, safety: MoveSafety): number {
+  if (score > MATE_SCORE / 2) return score;
+  const penalty = scoreMoveSafety(safety);
+  return score - penalty;
+}
+
+function getRootMoveSafety(state: GameState, move: Move, context: SearchContext): MoveSafety {
+  const key = moveKey(move);
+  const cached = context.safetyCache.get(key);
+  if (cached) return cached;
+  const safety = analyzeMoveSafety(state, move);
+  context.safetyCache.set(key, safety);
+  return safety;
 }
 
 function withMovePiece(state: GameState, move: Move): Move {

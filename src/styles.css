@@ -412,7 +412,7 @@ select {
   grid-template-columns: 20px minmax(0, 1fr) 48px;
   align-items: center;
   gap: 8px;
-  min-height: 28px;
+  min-height: 38px;
   color: #374151;
 }
 
@@ -422,8 +422,19 @@ select {
 }
 
 .candidateList code {
+  display: block;
   color: #182232;
   font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.candidateList small {
+  display: block;
+  margin-top: 2px;
+  color: #657186;
+  font-size: 0.68rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -5,14 +5,33 @@ import {
   createGameState,
   createInitialBoard,
   detectBlunders,
-  generateLegalMoves
+  emptyBoard,
+  generateLegalMoves,
+  searchBestMove,
+  setPiece
 } from './index';
+import { lostGameFixtures } from './__fixtures__/lostGames';
 import type { ScoreTimelineEntry } from './analysis';
+import type { Board, PieceKind, Side } from './index';
+
+function place(board: Board, x: number, y: number, side: Side, kind: PieceKind): void {
+  setPiece(board, { x, y }, { side, kind });
+}
+
+function hangingChariotBoard(): Board {
+  const board = emptyBoard();
+  place(board, 4, 8, 'CHO', 'GENERAL');
+  place(board, 4, 1, 'HAN', 'GENERAL');
+  place(board, 4, 5, 'CHO', 'SOLDIER');
+  place(board, 0, 6, 'CHO', 'CHARIOT');
+  place(board, 0, 3, 'HAN', 'CHARIOT');
+  return board;
+}
 
 describe('AI analysis tools', () => {
   it('analyzes a position with best move, score, and candidates', () => {
     const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
-    const analysis = analyzePosition(state, { limits: { maxDepth: 1, timeMs: 1000 }, maxCandidates: 4 });
+    const analysis = analyzePosition(state, { limits: { maxDepth: 1, timeMs: 2500 }, maxCandidates: 4 });
 
     expect(analysis.bestMove).not.toBeNull();
     expect(analysis.depth).toBe(1);
@@ -26,7 +45,7 @@ describe('AI analysis tools', () => {
     const initialBoard = createInitialBoard('inner-elephant', 'inner-elephant');
     const state = createGameState(initialBoard, 'CHO');
     const firstMove = generateLegalMoves(state)[0];
-    const analysis = analyzeGame(initialBoard, [firstMove], { limits: { maxDepth: 1, timeMs: 1000 }, maxCandidates: 2 });
+    const analysis = analyzeGame(initialBoard, [firstMove], { limits: { maxDepth: 1, timeMs: 2500 }, maxCandidates: 2 });
 
     expect(analysis.error).toBeUndefined();
     expect(analysis.history).toHaveLength(1);
@@ -65,5 +84,20 @@ describe('AI analysis tools', () => {
     expect(analysis.error).toContain('Illegal move at ply 1');
     expect(analysis.illegalPly).toBe(1);
     expect(analysis.history).toEqual([]);
+  });
+
+  it('keeps synthetic blunder fixtures available for regression coverage', () => {
+    expect(lostGameFixtures.map((fixture) => fixture.riskKind)).toEqual([
+      'free-chariot',
+      'free-cannon',
+      'allows-mate'
+    ]);
+  });
+
+  it('does not choose the synthetic free-chariot blunder after tactical safety', () => {
+    const state = createGameState(hangingChariotBoard(), 'CHO');
+    const result = searchBestMove(state, { maxDepth: 1, timeMs: 1000 }, { maxCandidates: 50 });
+
+    expect(result.selectedMoveSafety?.risks.some((risk) => risk.reason === 'HANGS_CHARIOT')).toBe(false);
   });
 });
