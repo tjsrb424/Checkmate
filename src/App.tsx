@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   Difficulty,
@@ -8,17 +8,23 @@ import {
   Position,
   Side,
   applyMove,
-  chooseBestMove,
   createGameState,
   createInitialBoard,
   formationLabels,
   generateLegalMoves,
   isInCheck,
+  isLegalMove,
   moveKey,
   otherSide,
   positionKey,
   samePosition
 } from './engine';
+import {
+  createAiSearchRequest,
+  formatSearchSummary,
+  isAiWorkerResponse,
+  isLatestWorkerResponse
+} from './workers/aiWorkerProtocol';
 
 const pieceLabels = {
   CHO: {
@@ -72,8 +78,13 @@ export default function App() {
   const [selected, setSelected] = useState<Position | null>(null);
   const [aiThinking, setAiThinking] = useState(false);
   const [lastSearch, setLastSearch] = useState('');
+  const [aiError, setAiError] = useState('');
+  const workerRef = useRef<Worker | null>(null);
+  const requestIdRef = useRef<string | null>(null);
+  const gameRef = useRef(game);
 
   const aiSide = otherSide(humanSide);
+  gameRef.current = game;
   const legalMoves = useMemo(() => generateLegalMoves(game), [game]);
   const selectedMoves = useMemo(
     () => (selected ? legalMoves.filter((move) => samePosition(move.from, selected)) : []),
@@ -83,28 +94,109 @@ export default function App() {
   const isAiTurn = game.turn === aiSide && !game.winner;
   const checkSide = isInCheck(game.board, game.turn) ? game.turn : null;
 
+  const cancelAiSearch = useCallback(() => {
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    requestIdRef.current = null;
+    setAiThinking(false);
+  }, []);
+
   useEffect(() => {
     if (!isAiTurn) return;
+    workerRef.current?.terminate();
+
+    const request = createAiSearchRequest(game, difficulty);
+    const worker = new Worker(new URL('./workers/aiWorker.ts', import.meta.url), { type: 'module' });
+    let searchStarted = false;
+    workerRef.current = worker;
+    requestIdRef.current = request.requestId;
     setAiThinking(true);
-    const timer = window.setTimeout(() => {
-      const result = chooseBestMove(game, difficulty);
-      if (result.move) {
-        setGame((current) => applyMove(current, result.move!, true));
-        setLastSearch(
-          `깊이 ${result.depth || 1}, 평가 ${Math.round(result.score)}, 노드 ${result.nodes}, Q ${result.qNodes}, NPS ${result.nps}, TT ${result.ttHits}, 컷 ${result.cutoffs}`
-        );
+    setAiError('');
+
+    function finishWorker() {
+      worker.terminate();
+      if (workerRef.current === worker) {
+        workerRef.current = null;
+        requestIdRef.current = null;
+        setAiThinking(false);
       }
+    }
+
+    worker.onmessage = (event: MessageEvent<unknown>) => {
+      const response = event.data;
+      if (!isAiWorkerResponse(response)) {
+        finishWorker();
+        setAiError('AI 오류: worker 응답 형식이 올바르지 않습니다.');
+        console.error('Invalid AI worker response', response);
+        return;
+      }
+
+      if (!isLatestWorkerResponse(response, requestIdRef.current)) {
+        worker.terminate();
+        return;
+      }
+
+      if (response.type === 'error') {
+        finishWorker();
+        setAiError(`AI 오류: ${response.message}`);
+        console.error(response.stack ?? response.message);
+        return;
+      }
+
+      const move = response.result.move;
+      if (!move) {
+        finishWorker();
+        setLastSearch(formatSearchSummary(response.result));
+        setSelected(null);
+        return;
+      }
+
+      const current = gameRef.current;
+      if (current.turn !== aiSide || current.winner) {
+        finishWorker();
+        console.warn('Ignored stale AI result for a non-AI turn.');
+        return;
+      }
+
+      if (!isLegalMove(current, move)) {
+        finishWorker();
+        setAiError('AI 오류: 현재 포지션에서 불법 수가 반환되었습니다.');
+        console.warn('Ignored illegal AI move.', move);
+        return;
+      }
+
+      setGame(applyMove(current, move, true));
+      setLastSearch(formatSearchSummary(response.result));
       setSelected(null);
-      setAiThinking(false);
+      finishWorker();
+    };
+
+    worker.onerror = (event) => {
+      finishWorker();
+      setAiError(`AI 오류: ${event.message}`);
+      console.error(event.message);
+    };
+
+    const timer = window.setTimeout(() => {
+      searchStarted = true;
+      worker.postMessage(request);
     }, 180);
-    return () => window.clearTimeout(timer);
-  }, [difficulty, game, isAiTurn]);
+    return () => {
+      window.clearTimeout(timer);
+      if (!searchStarted || workerRef.current === worker) {
+        finishWorker();
+      }
+    };
+  }, [difficulty, game, isAiTurn, aiSide]);
+
+  useEffect(() => cancelAiSearch, [cancelAiSearch]);
 
   function startNewGame() {
+    cancelAiSearch();
     setGame(createGameState(createInitialBoard(choFormation, hanFormation), 'CHO'));
     setSelected(null);
     setLastSearch('');
-    setAiThinking(false);
+    setAiError('');
   }
 
   function handleCellClick(pos: Position) {
@@ -135,8 +227,18 @@ export default function App() {
           </div>
           <div className="statusPanel">
             <span className={`turnBadge ${game.turn.toLowerCase()}`}>{sideLabels[game.turn]} 차례</span>
-            <strong>{game.winner ? `${sideLabels[game.winner]} 승리` : checkSide ? '장군' : aiThinking ? 'AI 사고 중' : '대국 진행'}</strong>
-            <small>{lastSearch || '탐색 기반 착수'}</small>
+            <strong>
+              {game.winner
+                ? `${sideLabels[game.winner]} 승리`
+                : aiError
+                  ? 'AI 오류'
+                  : checkSide
+                    ? '장군'
+                    : aiThinking
+                      ? 'AI 사고 중'
+                      : '대국 진행'}
+            </strong>
+            <small>{aiError || lastSearch || '탐색 기반 착수'}</small>
           </div>
         </header>
 
@@ -156,7 +258,15 @@ export default function App() {
               <span className="groupLabel">사용자 진영</span>
               <div className="segmented">
                 {(['CHO', 'HAN'] as Side[]).map((side) => (
-                  <button key={side} className={humanSide === side ? 'active' : ''} onClick={() => setHumanSide(side)}>
+                  <button
+                    key={side}
+                    className={humanSide === side ? 'active' : ''}
+                    onClick={() => {
+                      cancelAiSearch();
+                      setHumanSide(side);
+                      setSelected(null);
+                    }}
+                  >
                     {sideLabels[side]}
                   </button>
                 ))}
@@ -167,21 +277,49 @@ export default function App() {
               <span className="groupLabel">사용자 위치</span>
               <div className="segmented">
                 {(['bottom', 'top'] as BoardSeat[]).map((seat) => (
-                  <button key={seat} className={humanSeat === seat ? 'active' : ''} onClick={() => setHumanSeat(seat)}>
+                  <button
+                    key={seat}
+                    className={humanSeat === seat ? 'active' : ''}
+                    onClick={() => {
+                      cancelAiSearch();
+                      setHumanSeat(seat);
+                    }}
+                  >
                     {boardSeatLabels[seat]}
                   </button>
                 ))}
               </div>
             </div>
 
-            <FormationSelect label="초 차림" value={choFormation} onChange={setChoFormation} />
-            <FormationSelect label="한 차림" value={hanFormation} onChange={setHanFormation} />
+            <FormationSelect
+              label="초 차림"
+              value={choFormation}
+              onChange={(formation) => {
+                cancelAiSearch();
+                setChoFormation(formation);
+              }}
+            />
+            <FormationSelect
+              label="한 차림"
+              value={hanFormation}
+              onChange={(formation) => {
+                cancelAiSearch();
+                setHanFormation(formation);
+              }}
+            />
 
             <div className="controlGroup">
               <span className="groupLabel">AI 난이도</span>
               <div className="segmented">
                 {difficultyOptions.map((level) => (
-                  <button key={level} className={difficulty === level ? 'active' : ''} onClick={() => setDifficulty(level)}>
+                  <button
+                    key={level}
+                    className={difficulty === level ? 'active' : ''}
+                    onClick={() => {
+                      cancelAiSearch();
+                      setDifficulty(level);
+                    }}
+                  >
                     {difficultyLabels[level]}
                   </button>
                 ))}
