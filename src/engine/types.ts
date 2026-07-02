@@ -26,6 +26,7 @@ export interface Position {
 export interface Move {
   from: Position;
   to: Position;
+  piece?: Piece;
   captured?: Piece;
   score?: number;
 }

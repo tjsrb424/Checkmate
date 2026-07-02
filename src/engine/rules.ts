@@ -84,7 +84,7 @@ export function applyMove(state: GameState, move: Move, appendHistory = true): G
   const next: GameState = {
     board,
     turn: nextTurn,
-    history: appendHistory ? [...state.history, { ...move, captured }] : state.history
+    history: appendHistory ? [...state.history, { ...move, piece: movingPiece ?? move.piece, captured }] : state.history
   };
   if (appendHistory && isCheckmate(board, nextTurn)) {
     next.winner = state.turn;

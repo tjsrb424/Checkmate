@@ -310,6 +310,33 @@ select {
   font-weight: 850;
 }
 
+.controlHint {
+  margin: -4px 0 0;
+  color: #7a6370;
+  font-size: 0.78rem;
+}
+
+.gameActions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.gameActions button {
+  min-height: 38px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 6px;
+  color: #243044;
+  background: rgba(255, 252, 245, 0.82);
+  cursor: pointer;
+}
+
+.gameActions button:disabled {
+  color: #9aa3b2;
+  cursor: not-allowed;
+  background: rgba(231, 226, 216, 0.7);
+}
+
 .moveList {
   display: grid;
   gap: 8px;
@@ -338,9 +365,9 @@ select {
 }
 
 .moveList li {
-  display: flex;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 38px;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   padding-block: 5px;
   border-bottom: 1px solid rgba(29, 36, 48, 0.08);
@@ -350,6 +377,17 @@ select {
 .moveList code {
   color: #182232;
   font-size: 0.86rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moveList em {
+  color: #7b4f2f;
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 800;
+  text-align: right;
 }
 
 @media (max-width: 900px) {

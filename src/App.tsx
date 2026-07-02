@@ -8,16 +8,22 @@ import {
   Position,
   Side,
   applyMove,
+  canRedoMove,
   createGameState,
   createInitialBoard,
   formationLabels,
+  formatMoveWithPiece,
+  formatPlyNumber,
   generateLegalMoves,
   isInCheck,
   isLegalMove,
+  movesToUndoForHumanTurn,
   moveKey,
   otherSide,
   positionKey,
-  samePosition
+  samePosition,
+  undoLastMove,
+  undoMoves
 } from './engine';
 import {
   createAiSearchRequest,
@@ -68,6 +74,11 @@ const difficultyLabels: Record<Difficulty, string> = {
 const formationOptions: Formation[] = ['inner-elephant', 'outer-elephant', 'left-elephant', 'right-elephant'];
 const difficultyOptions: Difficulty[] = ['easy', 'normal', 'hard'];
 
+interface GameStartConfig {
+  choFormation: Formation;
+  hanFormation: Formation;
+}
+
 export default function App() {
   const [humanSide, setHumanSide] = useState<Side>('CHO');
   const [humanSeat, setHumanSeat] = useState<BoardSeat>('bottom');
@@ -75,7 +86,12 @@ export default function App() {
   const [hanFormation, setHanFormation] = useState<Formation>('inner-elephant');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [game, setGame] = useState<GameState>(() => createGameState(createInitialBoard('inner-elephant', 'inner-elephant')));
+  const [gameStartConfig, setGameStartConfig] = useState<GameStartConfig>({
+    choFormation: 'inner-elephant',
+    hanFormation: 'inner-elephant'
+  });
   const [selected, setSelected] = useState<Position | null>(null);
+  const [redoStack, setRedoStack] = useState<Move[]>([]);
   const [aiThinking, setAiThinking] = useState(false);
   const [lastSearch, setLastSearch] = useState('');
   const [aiError, setAiError] = useState('');
@@ -93,6 +109,7 @@ export default function App() {
   const legalTargetKeys = new Set(selectedMoves.map((move) => positionKey(move.to)));
   const isAiTurn = game.turn === aiSide && !game.winner;
   const checkSide = isInCheck(game.board, game.turn) ? game.turn : null;
+  const gameStatusLabel = getGameStatusLabel(game, checkSide, aiThinking, aiError);
 
   const cancelAiSearch = useCallback(() => {
     workerRef.current?.terminate();
@@ -166,6 +183,7 @@ export default function App() {
       }
 
       setGame(applyMove(current, move, true));
+      setRedoStack([]);
       setLastSearch(formatSearchSummary(response.result));
       setSelected(null);
       finishWorker();
@@ -193,9 +211,53 @@ export default function App() {
 
   function startNewGame() {
     cancelAiSearch();
-    setGame(createGameState(createInitialBoard(choFormation, hanFormation), 'CHO'));
+    const nextConfig = { choFormation, hanFormation };
+    setGameStartConfig(nextConfig);
+    setGame(createGameState(createInitialBoard(nextConfig.choFormation, nextConfig.hanFormation), 'CHO'));
     setSelected(null);
+    setRedoStack([]);
     setLastSearch('');
+    setAiError('');
+  }
+
+  function initialBoardForCurrentGame() {
+    return createInitialBoard(gameStartConfig.choFormation, gameStartConfig.hanFormation);
+  }
+
+  function undoOneMove() {
+    if (game.history.length === 0 || aiThinking) return;
+    cancelAiSearch();
+    const undoneMove = game.history[game.history.length - 1];
+    setGame(undoLastMove(game, initialBoardForCurrentGame(), 'CHO'));
+    setRedoStack((current) => [undoneMove, ...current]);
+    setSelected(null);
+    setAiError('');
+  }
+
+  function undoUntilHumanTurn() {
+    if (game.history.length === 0 || aiThinking) return;
+    cancelAiSearch();
+    const count = movesToUndoForHumanTurn(game, initialBoardForCurrentGame(), humanSide, 'CHO');
+    const undoneMoves = game.history.slice(game.history.length - count);
+    setGame(undoMoves(initialBoardForCurrentGame(), game.history, count, 'CHO'));
+    setRedoStack((current) => [...undoneMoves, ...current]);
+    setSelected(null);
+    setAiError('');
+  }
+
+  function redoMove() {
+    if (redoStack.length === 0 || aiThinking || isAiTurn || game.winner) return;
+    cancelAiSearch();
+    const [move, ...remaining] = redoStack;
+    if (!canRedoMove(game, move)) {
+      setRedoStack([]);
+      setAiError('다시두기할 수 없는 수입니다.');
+      return;
+    }
+
+    setGame(applyMove(game, move, true));
+    setRedoStack(remaining);
+    setSelected(null);
     setAiError('');
   }
 
@@ -214,7 +276,9 @@ export default function App() {
       return;
     }
     setGame((current) => applyMove(current, move, true));
+    setRedoStack([]);
     setSelected(null);
+    setAiError('');
   }
 
   return (
@@ -227,17 +291,7 @@ export default function App() {
           </div>
           <div className="statusPanel">
             <span className={`turnBadge ${game.turn.toLowerCase()}`}>{sideLabels[game.turn]} 차례</span>
-            <strong>
-              {game.winner
-                ? `${sideLabels[game.winner]} 승리`
-                : aiError
-                  ? 'AI 오류'
-                  : checkSide
-                    ? '장군'
-                    : aiThinking
-                      ? 'AI 사고 중'
-                      : '대국 진행'}
-            </strong>
+            <strong>{gameStatusLabel}</strong>
             <small>{aiError || lastSearch || '탐색 기반 착수'}</small>
           </div>
         </header>
@@ -265,6 +319,7 @@ export default function App() {
                       cancelAiSearch();
                       setHumanSide(side);
                       setSelected(null);
+                      setRedoStack([]);
                     }}
                   >
                     {sideLabels[side]}
@@ -283,6 +338,7 @@ export default function App() {
                     onClick={() => {
                       cancelAiSearch();
                       setHumanSeat(seat);
+                      setSelected(null);
                     }}
                   >
                     {boardSeatLabels[seat]}
@@ -297,6 +353,7 @@ export default function App() {
               onChange={(formation) => {
                 cancelAiSearch();
                 setChoFormation(formation);
+                setSelected(null);
               }}
             />
             <FormationSelect
@@ -305,8 +362,10 @@ export default function App() {
               onChange={(formation) => {
                 cancelAiSearch();
                 setHanFormation(formation);
+                setSelected(null);
               }}
             />
+            <p className="controlHint">차림 변경은 새 대국부터 적용</p>
 
             <div className="controlGroup">
               <span className="groupLabel">AI 난이도</span>
@@ -318,6 +377,7 @@ export default function App() {
                     onClick={() => {
                       cancelAiSearch();
                       setDifficulty(level);
+                      setSelected(null);
                     }}
                   >
                     {difficultyLabels[level]}
@@ -330,7 +390,19 @@ export default function App() {
               새 대국
             </button>
 
-            <MoveList history={game.history} />
+            <div className="gameActions">
+              <button onClick={undoOneMove} disabled={game.history.length === 0 || aiThinking}>
+                한 수 무르기
+              </button>
+              <button onClick={undoUntilHumanTurn} disabled={game.history.length === 0 || aiThinking}>
+                내 차례까지 무르기
+              </button>
+              <button onClick={redoMove} disabled={redoStack.length === 0 || aiThinking || isAiTurn || Boolean(game.winner)}>
+                다시두기
+              </button>
+            </div>
+
+            <MoveList history={game.history} humanSide={humanSide} />
           </aside>
         </div>
       </section>
@@ -443,7 +515,7 @@ function boardOffset(index: number): string {
   return `calc(var(--board-pad) + ${Array.from({ length: index }, () => 'var(--point-gap)').join(' + ')})`;
 }
 
-function MoveList({ history }: { history: Move[] }) {
+function MoveList({ history, humanSide }: { history: Move[]; humanSide: Side }) {
   return (
     <div className="moveList">
       <div className="moveListHeader">
@@ -453,10 +525,9 @@ function MoveList({ history }: { history: Move[] }) {
       <ol>
         {history.map((move, index) => (
           <li key={`${moveKey(move)}-${index}`}>
-            <span>{index % 2 === 0 ? '초' : '한'}</span>
-            <code>
-              {move.from.x},{move.from.y} → {move.to.x},{move.to.y}
-            </code>
+            <span>{formatPlyNumber(index)}</span>
+            <code>{formatMoveWithPiece(move, move.piece)}</code>
+            <em>{(move.piece?.side ?? (index % 2 === 0 ? 'CHO' : 'HAN')) === humanSide ? '사람' : 'AI'}</em>
           </li>
         ))}
       </ol>
@@ -468,4 +539,12 @@ function displayToBoard(pos: Position, humanSide: Side, humanSeat: BoardSeat): P
   const shouldRotate = humanSeat === 'bottom' ? humanSide === 'HAN' : humanSide === 'CHO';
   if (!shouldRotate) return pos;
   return { x: 8 - pos.x, y: 9 - pos.y };
+}
+
+function getGameStatusLabel(game: GameState, checkSide: Side | null, aiThinking: boolean, aiError: string): string {
+  if (game.winner) return `외통 - ${sideLabels[game.winner]} 승리`;
+  if (aiError) return 'AI 오류';
+  if (checkSide) return `${sideLabels[checkSide]} 장군`;
+  if (aiThinking) return 'AI 사고 중';
+  return '대국 진행';
 }
