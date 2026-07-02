@@ -104,6 +104,9 @@ describe('AI search stability', () => {
     expect(result.ttStores).toBeGreaterThan(0);
     expect(result.nps).toBeGreaterThan(0);
     expect(result.elapsedMs).toBeGreaterThanOrEqual(0);
+    expect(result.qNodes).toBeGreaterThan(0);
+    expect(result.qCutoffs).toBeGreaterThanOrEqual(0);
+    expect(result.quiescenceEnabled).toBe(true);
   });
 
   it('gets transposition hits when a table is reused', () => {

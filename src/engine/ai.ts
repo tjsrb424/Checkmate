@@ -40,8 +40,13 @@ interface SearchContext {
   ttHits: number;
   ttMisses: number;
   ttStores: number;
+  qNodes: number;
+  qCutoffs: number;
   table?: TranspositionTable;
   enableTransposition: boolean;
+  enableQuiescence: boolean;
+  maxQuiescenceDepth: number;
+  includeQuietChecks: boolean;
   rootMoveHint?: Move;
 }
 
@@ -57,12 +62,18 @@ export interface SearchResult {
   cutoffs: number;
   nps: number;
   elapsedMs: number;
+  qNodes: number;
+  qCutoffs: number;
+  quiescenceEnabled: boolean;
 }
 
 export interface SearchOptions {
   reuseTable?: boolean;
   table?: TranspositionTable;
   enableTransposition?: boolean;
+  enableQuiescence?: boolean;
+  maxQuiescenceDepth?: number;
+  includeQuietChecks?: boolean;
 }
 
 export function chooseBestMove(state: GameState, difficulty: Difficulty): SearchResult {
@@ -72,6 +83,7 @@ export function chooseBestMove(state: GameState, difficulty: Difficulty): Search
 
 export function searchBestMove(state: GameState, limits: SearchLimits, options: SearchOptions = {}): SearchResult {
   const enableTransposition = options.enableTransposition !== false;
+  const enableQuiescence = options.enableQuiescence !== false;
   const table = enableTransposition ? options.table ?? new TranspositionTable() : undefined;
   const context: SearchContext = {
     startedAt: performance.now(),
@@ -82,8 +94,13 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
     ttHits: 0,
     ttMisses: 0,
     ttStores: 0,
+    qNodes: 0,
+    qCutoffs: 0,
     table,
-    enableTransposition
+    enableTransposition,
+    enableQuiescence,
+    maxQuiescenceDepth: options.maxQuiescenceDepth ?? 6,
+    includeQuietChecks: options.includeQuietChecks ?? true
   };
   let bestMove: Move | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
@@ -119,7 +136,10 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
     ttStores: context.ttStores,
     cutoffs: context.cutoffs,
     nps: Math.round(context.nodes / Math.max(0.001, elapsedMs / 1000)),
-    elapsedMs
+    elapsedMs,
+    qNodes: context.qNodes,
+    qCutoffs: context.qCutoffs,
+    quiescenceEnabled: context.enableQuiescence
   };
 }
 
@@ -156,7 +176,10 @@ function searchRoot(state: GameState, depth: number, context: SearchContext): Se
     ttStores: context.ttStores,
     cutoffs: context.cutoffs,
     nps: 0,
-    elapsedMs: performance.now() - context.startedAt
+    elapsedMs: performance.now() - context.startedAt,
+    qNodes: context.qNodes,
+    qCutoffs: context.qCutoffs,
+    quiescenceEnabled: context.enableQuiescence
   };
 }
 
@@ -184,7 +207,9 @@ function negamax(
     return isInCheck(state.board, state.turn) ? -MATE_SCORE + ply : DRAW_SCORE;
   }
   if (depth === 0) {
-    return evaluatePosition(state, state.turn);
+    return context.enableQuiescence
+      ? quiescence(state, currentAlpha, currentBeta, context, ply, 0)
+      : evaluatePosition(state, state.turn);
   }
 
   let best = Number.NEGATIVE_INFINITY;
@@ -207,6 +232,47 @@ function negamax(
     storeTransposition(state, depth, best, originalAlpha, beta, bestMove, context, ply);
   }
   return best;
+}
+
+function quiescence(
+  state: GameState,
+  alpha: number,
+  beta: number,
+  context: SearchContext,
+  ply: number,
+  qDepth: number
+): number {
+  context.qNodes += 1;
+  if (isTimedOut(context)) return evaluatePosition(state, state.turn);
+
+  const legalMoves = generateLegalMoves(state);
+  if (legalMoves.length === 0) {
+    return isInCheck(state.board, state.turn) ? -MATE_SCORE + ply : DRAW_SCORE;
+  }
+  if (qDepth >= context.maxQuiescenceDepth) {
+    return evaluatePosition(state, state.turn);
+  }
+
+  const standPat = evaluatePosition(state, state.turn);
+  if (standPat >= beta) {
+    context.qCutoffs += 1;
+    return beta;
+  }
+
+  let currentAlpha = Math.max(alpha, standPat);
+  const tacticalMoves = orderTacticalMoves(state, getTacticalMoves(state, legalMoves, context));
+  for (const move of tacticalMoves) {
+    const next = applyMove(state, move, false);
+    const score = -quiescence(next, -beta, -currentAlpha, context, ply + 1, qDepth + 1);
+    if (context.timedOut) break;
+    if (score >= beta) {
+      context.qCutoffs += 1;
+      return beta;
+    }
+    if (score > currentAlpha) currentAlpha = score;
+  }
+
+  return currentAlpha;
 }
 
 export function evaluatePosition(state: GameState, side: Side): number {
@@ -270,6 +336,44 @@ function moveGuess(state: GameState, move: Move, ttMove?: Move, rootHint?: Move)
   if (mover && target) score += pieceValues[target.kind] * 10 - pieceValues[mover.kind];
   if (mover) score += positionalBonus(mover, move.to.x, move.to.y) - positionalBonus(mover, move.from.x, move.from.y);
   return score;
+}
+
+function getTacticalMoves(state: GameState, moves: Move[], context: SearchContext): Move[] {
+  return moves.filter((move) => {
+    const capture = isCapture(state, move);
+    const next = applyMove(state, move, false);
+    const mate = isCheckmate(next.board, next.turn);
+    const check = isInCheck(next.board, next.turn);
+
+    if (mate) return true;
+    if (capture) return true;
+    if (check && context.includeQuietChecks) return true;
+    return false;
+  });
+}
+
+function orderTacticalMoves(state: GameState, moves: Move[]): Move[] {
+  return [...moves].sort((a, b) => tacticalMoveGuess(state, b) - tacticalMoveGuess(state, a));
+}
+
+function tacticalMoveGuess(state: GameState, move: Move): number {
+  const next = applyMove(state, move, false);
+  if (isCheckmate(next.board, next.turn)) return MATE_SCORE;
+
+  const captureScore = captureGuess(state, move);
+  const checkScore = isInCheck(next.board, next.turn) ? 50_000 : 0;
+  return checkScore + captureScore;
+}
+
+function captureGuess(state: GameState, move: Move): number {
+  const victim = state.board[move.to.y][move.to.x] ?? move.captured;
+  const attacker = state.board[move.from.y][move.from.x];
+  if (!victim || !attacker) return 0;
+  return pieceValues[victim.kind] * 10 - pieceValues[attacker.kind];
+}
+
+function isCapture(state: GameState, move: Move): boolean {
+  return Boolean(move.captured ?? state.board[move.to.y][move.to.x]);
 }
 
 function getTransposition(

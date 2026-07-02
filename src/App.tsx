@@ -83,7 +83,7 @@ export default function App() {
       if (result.move) {
         setGame((current) => applyMove(current, result.move!, true));
         setLastSearch(
-          `깊이 ${result.depth || 1}, 평가 ${Math.round(result.score)}, 노드 ${result.nodes}, NPS ${result.nps}, TT ${result.ttHits}`
+          `깊이 ${result.depth || 1}, 평가 ${Math.round(result.score)}, 노드 ${result.nodes}, Q ${result.qNodes}, NPS ${result.nps}, TT ${result.ttHits}, 컷 ${result.cutoffs}`
         );
       }
       setSelected(null);
