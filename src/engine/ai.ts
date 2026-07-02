@@ -2,28 +2,16 @@ import {
   Difficulty,
   GameState,
   Move,
-  Piece,
   SearchLimits,
-  Side,
-  moveKey,
-  otherSide
+  moveKey
 } from './types';
 import { applyMove, generateLegalMoves, isCheckmate, isInCheck } from './rules';
 import { computeZobristHash, hashToKey } from './hash';
 import { TranspositionEntry, TranspositionTable } from './transposition';
+import { evaluatePosition, pieceValues, positionalBonus } from './evaluation';
 
 export const MATE_SCORE = 1_000_000;
 export const DRAW_SCORE = 0;
-
-const pieceValues: Record<Piece['kind'], number> = {
-  GENERAL: 100000,
-  CHARIOT: 1300,
-  CANNON: 700,
-  HORSE: 500,
-  ELEPHANT: 300,
-  GUARD: 300,
-  SOLDIER: 220
-};
 
 export const difficultyLimits: Record<Difficulty, SearchLimits> = {
   easy: { maxDepth: 2, timeMs: 450 },
@@ -273,47 +261,6 @@ function quiescence(
   }
 
   return currentAlpha;
-}
-
-export function evaluatePosition(state: GameState, side: Side): number {
-  const board = state.board;
-  let score = 0;
-  for (let y = 0; y < board.length; y += 1) {
-    for (let x = 0; x < board[y].length; x += 1) {
-      const piece = board[y][x];
-      if (!piece) continue;
-      const sign = piece.side === side ? 1 : -1;
-      score += sign * pieceValues[piece.kind];
-      score += sign * positionalBonus(piece, x, y);
-    }
-  }
-
-  const sideMobility = generateLegalMoves({ board, turn: side, history: state.history }, side).length;
-  const enemy = otherSide(side);
-  const enemyMobility = generateLegalMoves({ board, turn: enemy, history: state.history }, enemy).length;
-  score += (sideMobility - enemyMobility) * 7;
-
-  if (isInCheck(board, side)) score -= 350;
-  if (isInCheck(board, enemy)) score += 350;
-  return score;
-}
-
-function positionalBonus(piece: Piece, x: number, y: number): number {
-  const forwardProgress = piece.side === 'CHO' ? 9 - y : y;
-  switch (piece.kind) {
-    case 'SOLDIER':
-      return forwardProgress * 18 + (x >= 3 && x <= 5 ? 16 : 0);
-    case 'HORSE':
-    case 'ELEPHANT':
-      return forwardProgress > 1 ? 35 : -20;
-    case 'CHARIOT':
-    case 'CANNON':
-      return x >= 2 && x <= 6 ? 24 : 0;
-    case 'GENERAL':
-      return x === 4 ? 20 : -25;
-    case 'GUARD':
-      return 10;
-  }
 }
 
 function orderMoves(state: GameState, moves: Move[], context?: SearchContext): Move[] {
