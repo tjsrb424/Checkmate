@@ -1,6 +1,6 @@
 # AI Beta Readiness
 
-외통수 AI는 현재 고수급 엔진이 아니라 초보자용 AI 대국 베타입니다. 실수할 수 있으며, Arena 리그와 블런더 fixture로 계속 품질을 확인합니다.
+외통수 AI는 현재 상급 엔진이 아니라 초보자용 AI 대국 베타입니다. 실수할 수 있으며, Arena 리그와 블런더 fixture로 계속 품질을 확인합니다.
 
 ## Beta Gates
 

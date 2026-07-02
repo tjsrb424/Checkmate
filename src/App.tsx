@@ -346,7 +346,7 @@ export default function App() {
       <section className="gameSurface">
         <header className="topBar">
           <div>
-            <p className="eyebrow">프로젝트 외통수</p>
+            <p className="eyebrow">외통수 베타</p>
             <h1>사람 vs AI 장기</h1>
             <p className="betaNotice">AI 대국 베타입니다. 실수할 수 있으며, 분석과 개선을 계속 진행 중입니다.</p>
           </div>

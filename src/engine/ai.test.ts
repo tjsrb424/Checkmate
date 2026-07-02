@@ -164,6 +164,25 @@ describe('AI search stability', () => {
     expect(result.move).not.toEqual(dangerous!.move);
   });
 
+  it('disables root tactical safety penalties when requested', () => {
+    const state = createGameState(hangingChariotBoard(), 'CHO');
+    const withSafety = searchBestMove(state, { maxDepth: 1, timeMs: 1000 }, { maxCandidates: 50, useTacticalSafety: true });
+    const withoutSafety = searchBestMove(state, { maxDepth: 1, timeMs: 1000 }, { maxCandidates: 50, useTacticalSafety: false });
+    const riskyWithSafety = withSafety.candidates?.find((candidate) =>
+      candidate.safety?.risks.some((risk) => risk.reason === 'HANGS_CHARIOT')
+    );
+    const riskyWithoutSafety = withoutSafety.candidates?.find((candidate) =>
+      riskyWithSafety ? moveKey(candidate.move) === moveKey(riskyWithSafety.move) : false
+    );
+
+    expect(riskyWithSafety).toBeDefined();
+    expect(riskyWithoutSafety).toBeDefined();
+    expect(riskyWithSafety!.safetyPenalty).toBeGreaterThan(0);
+    expect(riskyWithSafety!.score).toBeLessThan(riskyWithoutSafety!.score);
+    expect(riskyWithoutSafety!.safety).toBeUndefined();
+    expect(riskyWithoutSafety!.safetyPenalty).toBe(0);
+  });
+
   it('gets transposition hits when a table is reused', () => {
     const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
     const table = new TranspositionTable();
