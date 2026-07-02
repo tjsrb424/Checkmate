@@ -11,7 +11,8 @@ import {
   isCheckmate,
   MATE_SCORE,
   searchBestMove,
-  setPiece
+  setPiece,
+  TranspositionTable
 } from './index';
 
 function place(board: Board, x: number, y: number, side: Side, kind: PieceKind): void {
@@ -91,6 +92,35 @@ describe('AI search stability', () => {
     expect(depthOne.nodes).toBeGreaterThan(0);
     expect(depthTwo.depth).toBe(2);
     expect(depthTwo.nodes).toBeGreaterThan(depthOne.nodes);
+  });
+
+  it('returns principal variation and search stats', () => {
+    const state = createGameState(nodeCountBoard(), 'CHO');
+    const result = searchBestMove(state, { maxDepth: 2, timeMs: 1000 });
+
+    expect(result.pv.length).toBeGreaterThan(0);
+    expect(result.pv[0]).toEqual(result.move);
+    expect(result.ttHits + result.ttMisses).toBeGreaterThan(0);
+    expect(result.ttStores).toBeGreaterThan(0);
+    expect(result.nps).toBeGreaterThan(0);
+    expect(result.elapsedMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('gets transposition hits when a table is reused', () => {
+    const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
+    const table = new TranspositionTable();
+
+    searchBestMove(state, { maxDepth: 2, timeMs: 1000 }, { table });
+    const result = searchBestMove(state, { maxDepth: 2, timeMs: 1000 }, { table });
+
+    expect(result.ttHits).toBeGreaterThan(0);
+  });
+
+  it('records alpha-beta cutoffs at deeper depth', () => {
+    const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
+    const result = searchBestMove(state, { maxDepth: 3, timeMs: 2000 });
+
+    expect(result.cutoffs).toBeGreaterThan(0);
   });
 
   it('keeps a fallback move when the search times out before completing a depth', () => {

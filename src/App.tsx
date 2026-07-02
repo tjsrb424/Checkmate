@@ -82,7 +82,9 @@ export default function App() {
       const result = chooseBestMove(game, difficulty);
       if (result.move) {
         setGame((current) => applyMove(current, result.move!, true));
-        setLastSearch(`깊이 ${result.depth || 1}, 평가 ${Math.round(result.score)}, 노드 ${result.nodes}`);
+        setLastSearch(
+          `깊이 ${result.depth || 1}, 평가 ${Math.round(result.score)}, 노드 ${result.nodes}, NPS ${result.nps}, TT ${result.ttHits}`
+        );
       }
       setSelected(null);
       setAiThinking(false);
