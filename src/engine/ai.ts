@@ -5,11 +5,12 @@ import {
   Piece,
   SearchLimits,
   Side,
-  applyMove,
-  generateLegalMoves,
-  isInCheck,
   otherSide
-} from './index';
+} from './types';
+import { applyMove, generateLegalMoves, isCheckmate, isInCheck } from './rules';
+
+export const MATE_SCORE = 1_000_000;
+export const DRAW_SCORE = 0;
 
 const pieceValues: Record<Piece['kind'], number> = {
   GENERAL: 100000,
@@ -31,6 +32,7 @@ interface SearchContext {
   startedAt: number;
   timeMs: number;
   timedOut: boolean;
+  nodes: number;
 }
 
 export interface SearchResult {
@@ -49,16 +51,15 @@ export function searchBestMove(state: GameState, limits: SearchLimits): SearchRe
   const context: SearchContext = {
     startedAt: performance.now(),
     timeMs: limits.timeMs,
-    timedOut: false
+    timedOut: false,
+    nodes: 0
   };
   let bestMove: Move | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
   let completedDepth = 0;
-  let nodes = 0;
 
   for (let depth = 1; depth <= limits.maxDepth; depth += 1) {
     const result = searchRoot(state, depth, context);
-    nodes += result.nodes;
     if (context.timedOut) break;
     if (result.move) {
       bestMove = result.move;
@@ -73,7 +74,7 @@ export function searchBestMove(state: GameState, limits: SearchLimits): SearchRe
     bestScore = bestMove ? evaluatePosition(applyMove(state, bestMove, false), state.turn) : 0;
   }
 
-  return { move: bestMove, score: bestScore, depth: completedDepth, nodes };
+  return { move: bestMove, score: bestScore, depth: completedDepth, nodes: context.nodes };
 }
 
 function searchRoot(state: GameState, depth: number, context: SearchContext): SearchResult {
@@ -81,13 +82,12 @@ function searchRoot(state: GameState, depth: number, context: SearchContext): Se
   let bestMove: Move | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
   let alpha = Number.NEGATIVE_INFINITY;
-  let nodes = 0;
 
   for (const move of moves) {
     if (isTimedOut(context)) break;
     const next = applyMove(state, move, false);
-    const result = -negamax(next, depth - 1, Number.NEGATIVE_INFINITY, -alpha, state.turn, context);
-    nodes += 1;
+    const result = -negamax(next, depth - 1, Number.NEGATIVE_INFINITY, -alpha, context, 1);
+    if (context.timedOut) break;
     if (result > bestScore) {
       bestScore = result;
       bestMove = move;
@@ -95,7 +95,7 @@ function searchRoot(state: GameState, depth: number, context: SearchContext): Se
     alpha = Math.max(alpha, bestScore);
   }
 
-  return { move: bestMove, score: bestScore, depth, nodes };
+  return { move: bestMove, score: bestScore, depth, nodes: context.nodes };
 }
 
 function negamax(
@@ -103,21 +103,26 @@ function negamax(
   depth: number,
   alpha: number,
   beta: number,
-  rootSide: Side,
-  context: SearchContext
+  context: SearchContext,
+  ply: number
 ): number {
-  if (isTimedOut(context)) return evaluatePosition(state, rootSide);
+  context.nodes += 1;
+  if (isTimedOut(context)) return evaluatePosition(state, state.turn);
 
   const legalMoves = generateLegalMoves(state);
-  if (depth === 0 || legalMoves.length === 0) {
-    return evaluatePosition(state, rootSide) * (state.turn === rootSide ? 1 : -1);
+  if (legalMoves.length === 0) {
+    return isInCheck(state.board, state.turn) ? -MATE_SCORE + ply : DRAW_SCORE;
+  }
+  if (depth === 0) {
+    return evaluatePosition(state, state.turn);
   }
 
   let best = Number.NEGATIVE_INFINITY;
   let currentAlpha = alpha;
   for (const move of orderMoves(state, legalMoves)) {
     const next = applyMove(state, move, false);
-    const score = -negamax(next, depth - 1, -beta, -currentAlpha, rootSide, context);
+    const score = -negamax(next, depth - 1, -beta, -currentAlpha, context, ply + 1);
+    if (context.timedOut) break;
     best = Math.max(best, score);
     currentAlpha = Math.max(currentAlpha, score);
     if (currentAlpha >= beta) break;
@@ -173,10 +178,13 @@ function orderMoves(state: GameState, moves: Move[]): Move[] {
 function moveGuess(state: GameState, move: Move): number {
   const target = state.board[move.to.y][move.to.x];
   const mover = state.board[move.from.y][move.from.x];
-  let score = target ? pieceValues[target.kind] * 10 : 0;
-  if (mover && target) score -= pieceValues[mover.kind];
   const next = applyMove(state, move, false);
-  if (isInCheck(next.board, next.turn)) score += 5000;
+  if (isCheckmate(next.board, next.turn)) return MATE_SCORE;
+
+  let score = 0;
+  if (isInCheck(next.board, next.turn)) score += 50_000;
+  if (mover && target) score += pieceValues[target.kind] * 10 - pieceValues[mover.kind];
+  if (mover) score += positionalBonus(mover, move.to.x, move.to.y) - positionalBonus(mover, move.from.x, move.from.y);
   return score;
 }
 
