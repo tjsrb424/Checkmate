@@ -8,6 +8,7 @@ import {
   Position,
   Side,
   applyMove,
+  builtInOpeningBook,
   canRedoMove,
   createGameState,
   createInitialBoard,
@@ -85,6 +86,7 @@ export default function App() {
   const [choFormation, setChoFormation] = useState<Formation>('inner-elephant');
   const [hanFormation, setHanFormation] = useState<Formation>('inner-elephant');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const [useOpeningBook, setUseOpeningBook] = useState(true);
   const [game, setGame] = useState<GameState>(() => createGameState(createInitialBoard('inner-elephant', 'inner-elephant')));
   const [gameStartConfig, setGameStartConfig] = useState<GameStartConfig>({
     choFormation: 'inner-elephant',
@@ -122,7 +124,17 @@ export default function App() {
     if (!isAiTurn) return;
     workerRef.current?.terminate();
 
-    const request = createAiSearchRequest(game, difficulty);
+    const request = createAiSearchRequest(game, difficulty, {
+      useOpeningBook,
+      openingBook: useOpeningBook ? builtInOpeningBook : undefined,
+      openingBookContext: {
+        choFormation: gameStartConfig.choFormation,
+        hanFormation: gameStartConfig.hanFormation,
+        minPlayCount: 2,
+        maxMoves: 5
+      },
+      maxBookPly: 16
+    });
     const worker = new Worker(new URL('./workers/aiWorker.ts', import.meta.url), { type: 'module' });
     let searchStarted = false;
     workerRef.current = worker;
@@ -205,7 +217,7 @@ export default function App() {
         finishWorker();
       }
     };
-  }, [difficulty, game, isAiTurn, aiSide]);
+  }, [difficulty, game, isAiTurn, aiSide, useOpeningBook, gameStartConfig]);
 
   useEffect(() => cancelAiSearch, [cancelAiSearch]);
 
@@ -383,6 +395,32 @@ export default function App() {
                     {difficultyLabels[level]}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="controlGroup">
+              <span className="groupLabel">오프닝북</span>
+              <div className="segmented">
+                <button
+                  className={useOpeningBook ? 'active' : ''}
+                  onClick={() => {
+                    cancelAiSearch();
+                    setUseOpeningBook(true);
+                    setSelected(null);
+                  }}
+                >
+                  사용
+                </button>
+                <button
+                  className={!useOpeningBook ? 'active' : ''}
+                  onClick={() => {
+                    cancelAiSearch();
+                    setUseOpeningBook(false);
+                    setSelected(null);
+                  }}
+                >
+                  미사용
+                </button>
               </div>
             </div>
 

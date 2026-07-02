@@ -19,6 +19,7 @@ import {
   parseOpeningRecordsCsv,
   resultForSide
 } from './index';
+import { builtInOpeningBook } from './openingBookData';
 
 function fixtureRecords(): OpeningBookRecord[] {
   return [
@@ -189,6 +190,14 @@ describe('opening book build and lookup', () => {
     expect(restored.positionCount).toBe(book.positionCount);
     expect(restored.moveCount).toBe(book.moveCount);
     expect(Object.keys(restored.positions)).toEqual(Object.keys(book.positions));
+  });
+
+  it('provides a built-in seed book with an initial candidate', () => {
+    const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
+    const moves = lookupOpeningMoves(builtInOpeningBook, state, { minPlayCount: 2 });
+
+    expect(builtInOpeningBook.positionCount).toBeGreaterThan(0);
+    expect(moves.length).toBeGreaterThan(0);
   });
 });
 

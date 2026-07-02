@@ -7,7 +7,8 @@ import {
   createSearchEnginePlayer,
   runArenaGame,
   runArenaSeries,
-  summarizeArenaResults
+  summarizeArenaResults,
+  builtInOpeningBook
 } from './index';
 
 function quickPlayer(id: string): ArenaPlayer {
@@ -38,7 +39,8 @@ function nullMovePlayer(id: string): ArenaPlayer {
         elapsedMs: 0,
         qNodes: 0,
         qCutoffs: 0,
-        quiescenceEnabled: false
+        quiescenceEnabled: false,
+        source: 'search'
       };
     }
   };
@@ -162,6 +164,30 @@ describe('AI arena', () => {
 
     expect(parsed.seriesId).toBe('json');
     expect(parsed.results[0].gameId).toBe('g1');
+  });
+
+  it('records opening book source in search summaries', () => {
+    const result = runArenaGame({
+      gameId: 'book',
+      choPlayer: createSearchEnginePlayer({
+        id: 'book-on',
+        label: 'Book ON',
+        limits: { maxDepth: 1, timeMs: 100 },
+        options: {
+          enableQuiescence: false,
+          useOpeningBook: true,
+          openingBook: builtInOpeningBook,
+          openingBookContext: { minPlayCount: 2 },
+          maxBookPly: 16
+        }
+      }),
+      hanPlayer: quickPlayer('han'),
+      maxPlies: 1,
+      recordSearchStats: true
+    });
+
+    expect(result.searchSummaries?.[0].source).toBe('book');
+    expect(result.searchSummaries?.[0].bookPlayCount).toBeGreaterThan(0);
   });
 });
 

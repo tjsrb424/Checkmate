@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGameState, createInitialBoard } from '../engine';
+import { builtInOpeningBook, createGameState, createInitialBoard } from '../engine';
 import type { AiWorkerResponse } from './aiWorkerProtocol';
 import {
   createAiSearchRequest,
@@ -14,7 +14,7 @@ describe('AI worker protocol', () => {
     const request = createAiSearchRequest(
       state,
       'hard',
-      { enableQuiescence: false, maxQuiescenceDepth: 2 },
+      { enableQuiescence: false, maxQuiescenceDepth: 2, useOpeningBook: true, openingBook: builtInOpeningBook, table: undefined },
       'request-1'
     );
 
@@ -26,8 +26,13 @@ describe('AI worker protocol', () => {
       enableTransposition: undefined,
       enableQuiescence: false,
       maxQuiescenceDepth: 2,
-      includeQuietChecks: undefined
+      includeQuietChecks: undefined,
+      useOpeningBook: true,
+      openingBook: builtInOpeningBook,
+      openingBookContext: undefined,
+      maxBookPly: undefined
     });
+    expect('table' in request.options!).toBe(false);
   });
 
   it('recognizes result and error responses', () => {
@@ -63,7 +68,8 @@ describe('AI worker protocol', () => {
       elapsedMs: 2364,
       qNodes: 9120,
       qCutoffs: 88,
-      quiescenceEnabled: true
+      quiescenceEnabled: true,
+      source: 'search'
     });
 
     expect(summary).toContain('깊이 4');
@@ -73,6 +79,34 @@ describe('AI worker protocol', () => {
     expect(summary).toContain('NPS 20400');
     expect(summary).toContain('TT 132');
     expect(summary).toContain('컷 840');
+  });
+
+  it('formats opening book search summaries', () => {
+    const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'));
+    const bookMove = Object.values(builtInOpeningBook.positions)[0].moves[0];
+    const summary = formatSearchSummary({
+      move: bookMove.move,
+      score: 0,
+      depth: 0,
+      nodes: 0,
+      pv: [bookMove.move],
+      ttHits: 0,
+      ttMisses: 0,
+      ttStores: 0,
+      cutoffs: 0,
+      nps: 0,
+      elapsedMs: 0,
+      qNodes: 0,
+      qCutoffs: 0,
+      quiescenceEnabled: true,
+      source: 'book',
+      bookMove
+    });
+
+    expect(state.turn).toBe('CHO');
+    expect(summary).toContain('오프닝북:');
+    expect(summary).toContain('표본');
+    expect(summary).toContain('승점률');
   });
 
   it('checks whether a worker response belongs to the latest request', () => {

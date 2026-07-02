@@ -10,6 +10,7 @@ import { applyMove, createGameState, isLegalMove } from './rules';
 import { createInitialBoard } from './setup';
 import { difficultyLimits, searchBestMove } from './ai';
 import type { SearchOptions, SearchResult } from './ai';
+import type { OpeningBook, OpeningBookLookupOptions } from './openingBook';
 
 export type ArenaGameOutcome = 'CHO_WIN' | 'HAN_WIN' | 'DRAW' | 'FORFEIT';
 export type ArenaForfeitReason = 'NO_MOVE' | 'ILLEGAL_MOVE' | 'SEARCH_ERROR';
@@ -21,6 +22,10 @@ export interface EnginePlayerConfig {
   limits?: SearchLimits;
   options?: SearchOptions;
   sidePreference?: Side;
+  useOpeningBook?: boolean;
+  openingBook?: OpeningBook;
+  openingBookContext?: OpeningBookLookupOptions;
+  maxBookPly?: number;
 }
 
 export interface ArenaPlayer {
@@ -69,6 +74,10 @@ export interface ArenaMoveSummary {
   nps: number;
   ttHits: number;
   cutoffs: number;
+  source: 'book' | 'search';
+  bookPlayCount?: number;
+  bookScoreRate?: number;
+  bookScore?: number;
 }
 
 export interface ArenaGameResult {
@@ -116,7 +125,13 @@ export function createSearchEnginePlayer(config: EnginePlayerConfig): ArenaPlaye
     label: config.label,
     chooseMove(state: GameState): SearchResult {
       const limits = config.limits ?? difficultyLimits[config.difficulty ?? 'normal'];
-      return searchBestMove(state, limits, config.options);
+      return searchBestMove(state, limits, {
+        ...config.options,
+        useOpeningBook: config.useOpeningBook ?? config.options?.useOpeningBook,
+        openingBook: config.openingBook ?? config.options?.openingBook,
+        openingBookContext: config.openingBookContext ?? config.options?.openingBookContext,
+        maxBookPly: config.maxBookPly ?? config.options?.maxBookPly
+      });
     }
   };
 }
@@ -362,7 +377,11 @@ function searchResultToSummary(ply: number, side: Side, result: SearchResult): A
     qNodes: result.qNodes,
     nps: result.nps,
     ttHits: result.ttHits,
-    cutoffs: result.cutoffs
+    cutoffs: result.cutoffs,
+    source: result.source,
+    bookPlayCount: result.bookMove?.playCount,
+    bookScoreRate: result.bookMove?.scoreRate,
+    bookScore: result.bookMove?.bookScore
   };
 }
 

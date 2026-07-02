@@ -5,10 +5,12 @@ import {
   SearchLimits,
   moveKey
 } from './types';
-import { applyMove, generateLegalMoves, isCheckmate, isInCheck } from './rules';
+import { applyMove, generateLegalMoves, isCheckmate, isInCheck, isLegalMove } from './rules';
 import { computeZobristHash, hashToKey } from './hash';
 import { TranspositionEntry, TranspositionTable } from './transposition';
 import { evaluatePosition, pieceValues, positionalBonus } from './evaluation';
+import { lookupOpeningMoves } from './openingBook';
+import type { OpeningBook, OpeningBookLookupOptions, OpeningBookMove } from './openingBook';
 
 export const MATE_SCORE = 1_000_000;
 export const DRAW_SCORE = 0;
@@ -53,6 +55,9 @@ export interface SearchResult {
   qNodes: number;
   qCutoffs: number;
   quiescenceEnabled: boolean;
+  source: 'book' | 'search';
+  bookMove?: OpeningBookMove;
+  bookCandidates?: OpeningBookMove[];
 }
 
 export interface SearchOptions {
@@ -62,6 +67,10 @@ export interface SearchOptions {
   enableQuiescence?: boolean;
   maxQuiescenceDepth?: number;
   includeQuietChecks?: boolean;
+  useOpeningBook?: boolean;
+  openingBook?: OpeningBook;
+  openingBookContext?: OpeningBookLookupOptions;
+  maxBookPly?: number;
 }
 
 export function chooseBestMove(state: GameState, difficulty: Difficulty): SearchResult {
@@ -70,6 +79,9 @@ export function chooseBestMove(state: GameState, difficulty: Difficulty): Search
 }
 
 export function searchBestMove(state: GameState, limits: SearchLimits, options: SearchOptions = {}): SearchResult {
+  const bookResult = tryOpeningBookMove(state, options);
+  if (bookResult) return bookResult;
+
   const enableTransposition = options.enableTransposition !== false;
   const enableQuiescence = options.enableQuiescence !== false;
   const table = enableTransposition ? options.table ?? new TranspositionTable() : undefined;
@@ -127,7 +139,8 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
     elapsedMs,
     qNodes: context.qNodes,
     qCutoffs: context.qCutoffs,
-    quiescenceEnabled: context.enableQuiescence
+    quiescenceEnabled: context.enableQuiescence,
+    source: 'search'
   };
 }
 
@@ -167,7 +180,40 @@ function searchRoot(state: GameState, depth: number, context: SearchContext): Se
     elapsedMs: performance.now() - context.startedAt,
     qNodes: context.qNodes,
     qCutoffs: context.qCutoffs,
-    quiescenceEnabled: context.enableQuiescence
+    quiescenceEnabled: context.enableQuiescence,
+    source: 'search'
+  };
+}
+
+function tryOpeningBookMove(state: GameState, options: SearchOptions): SearchResult | null {
+  if (options.useOpeningBook !== true || !options.openingBook) return null;
+  if (state.history.length > (options.maxBookPly ?? 16)) return null;
+
+  const candidates = lookupOpeningMoves(options.openingBook, state, {
+    ...options.openingBookContext,
+    maxMoves: options.openingBookContext?.maxMoves ?? 5
+  });
+  const bookMove = candidates[0];
+  if (!bookMove || !isLegalMove(state, bookMove.move)) return null;
+
+  return {
+    move: bookMove.move,
+    score: Math.round(bookMove.bookScore * 1000),
+    depth: 0,
+    nodes: 0,
+    pv: [bookMove.move],
+    ttHits: 0,
+    ttMisses: 0,
+    ttStores: 0,
+    cutoffs: 0,
+    nps: 0,
+    elapsedMs: 0,
+    qNodes: 0,
+    qCutoffs: 0,
+    quiescenceEnabled: options.enableQuiescence !== false,
+    source: 'book',
+    bookMove,
+    bookCandidates: candidates.slice(0, 5)
   };
 }
 

@@ -243,6 +243,18 @@ export function chooseOpeningBookMove(
   return lookupOpeningMoves(book, state, context)[0]?.move ?? null;
 }
 
+export function isOpeningBookMoveAvailable(
+  book: OpeningBook,
+  state: GameState,
+  context: OpeningBookLookupOptions = {}
+): boolean {
+  return lookupOpeningMoves(book, state, context).length > 0;
+}
+
+export function describeOpeningBookMove(bookMove: OpeningBookMove): string {
+  return `book playCount=${bookMove.playCount} scoreRate=${(bookMove.scoreRate * 100).toFixed(1)}% bookScore=${bookMove.bookScore.toFixed(2)}`;
+}
+
 export function openingBookToJson(book: OpeningBook): string {
   return JSON.stringify(book, null, 2);
 }
@@ -300,10 +312,10 @@ function compareBookMoves(a: OpeningBookMove, b: OpeningBookMove, minPlayCount: 
 }
 
 function findMatchingLegalMove(state: GameState, move: Move): Move | null {
-  return (
-    generateLegalMoves(state).find((legalMove) => samePosition(legalMove.from, move.from) && samePosition(legalMove.to, move.to)) ??
-    null
-  );
+  const legalMove =
+    generateLegalMoves(state).find((candidate) => samePosition(candidate.from, move.from) && samePosition(candidate.to, move.to)) ?? null;
+  if (!legalMove) return null;
+  return { ...legalMove, piece: state.board[legalMove.from.y][legalMove.from.x] ?? undefined };
 }
 
 function tokenizeFirst16(first16: string): string[] {

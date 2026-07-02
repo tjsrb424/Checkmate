@@ -1,8 +1,16 @@
 import type { Difficulty, GameState, SearchOptions, SearchResult } from '../engine';
+import { formatMoveWithPiece } from '../engine/notation';
 
 export type SerializableSearchOptions = Pick<
   SearchOptions,
-  'enableTransposition' | 'enableQuiescence' | 'maxQuiescenceDepth' | 'includeQuietChecks'
+  | 'enableTransposition'
+  | 'enableQuiescence'
+  | 'maxQuiescenceDepth'
+  | 'includeQuietChecks'
+  | 'useOpeningBook'
+  | 'openingBook'
+  | 'openingBookContext'
+  | 'maxBookPly'
 >;
 
 export interface AiSearchRequest {
@@ -56,6 +64,12 @@ export function isLatestWorkerResponse(response: AiWorkerResponse, requestId: st
 }
 
 export function formatSearchSummary(result: SearchResult): string {
+  if (result.source === 'book' && result.bookMove) {
+    return `오프닝북: ${formatMoveWithPiece(result.bookMove.move, result.bookMove.move.piece)}, 표본 ${result.bookMove.playCount}, 승점률 ${(
+      result.bookMove.scoreRate * 100
+    ).toFixed(1)}%`;
+  }
+  if (result.source === 'book') return '오프닝북 착수';
   return `깊이 ${result.depth || 1}, 평가 ${Math.round(result.score)}, 노드 ${result.nodes}, Q ${result.qNodes}, NPS ${result.nps}, TT ${result.ttHits}, 컷 ${result.cutoffs}`;
 }
 
@@ -71,7 +85,11 @@ function toSerializableSearchOptions(options: SearchOptions): SerializableSearch
     enableTransposition: options.enableTransposition,
     enableQuiescence: options.enableQuiescence,
     maxQuiescenceDepth: options.maxQuiescenceDepth,
-    includeQuietChecks: options.includeQuietChecks
+    includeQuietChecks: options.includeQuietChecks,
+    useOpeningBook: options.useOpeningBook,
+    openingBook: options.openingBook,
+    openingBookContext: options.openingBookContext,
+    maxBookPly: options.maxBookPly
   };
 }
 

@@ -7,6 +7,7 @@ export * from './notation';
 export * from './history';
 export * from './arena';
 export * from './openingBook';
+export * from './openingBookData';
 export * from './perft';
 export * from './hash';
 export * from './transposition';

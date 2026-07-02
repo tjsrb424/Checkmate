@@ -14,6 +14,9 @@ import {
   setPiece,
   TranspositionTable
 } from './index';
+import { builtInOpeningBook, lookupOpeningMoves } from './index';
+import { computeZobristHash, hashToKey } from './hash';
+import type { OpeningBook } from './openingBook';
 
 function place(board: Board, x: number, y: number, side: Side, kind: PieceKind): void {
   setPiece(board, { x, y }, { side, kind });
@@ -88,6 +91,7 @@ describe('AI search stability', () => {
     const depthTwo = searchBestMove(state, { maxDepth: 2, timeMs: 1000 });
 
     expect(depthOne.move).not.toBeNull();
+    expect(depthOne.source).toBe('search');
     expect(depthOne.depth).toBe(1);
     expect(depthOne.nodes).toBeGreaterThan(0);
     expect(depthTwo.depth).toBe(2);
@@ -132,5 +136,83 @@ describe('AI search stability', () => {
 
     expect(result.move).not.toBeNull();
     expect(result.depth).toBe(0);
+  });
+
+  it('uses an opening book move before searching when available', () => {
+    const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
+    const bookMove = lookupOpeningMoves(builtInOpeningBook, state, { minPlayCount: 2 })[0];
+    const result = searchBestMove(state, { maxDepth: 2, timeMs: 1000 }, {
+      useOpeningBook: true,
+      openingBook: builtInOpeningBook,
+      openingBookContext: { minPlayCount: 2 },
+      maxBookPly: 16
+    });
+
+    expect(result.source).toBe('book');
+    expect(result.move).toEqual(bookMove.move);
+    expect(result.nodes).toBe(0);
+    expect(result.pv[0]).toEqual(bookMove.move);
+    expect(result.bookMove).toEqual(bookMove);
+  });
+
+  it('falls back to search when the opening book is unavailable or too late', () => {
+    const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
+    const first = lookupOpeningMoves(builtInOpeningBook, state, { minPlayCount: 2 })[0].move;
+    const later = applyMove(state, first, true);
+
+    const noBook = searchBestMove(state, { maxDepth: 1, timeMs: 1000 }, { useOpeningBook: true });
+    const tooLate = searchBestMove(later, { maxDepth: 1, timeMs: 1000 }, {
+      useOpeningBook: true,
+      openingBook: builtInOpeningBook,
+      openingBookContext: { minPlayCount: 2 },
+      maxBookPly: 0
+    });
+
+    expect(noBook.source).toBe('search');
+    expect(tooLate.source).toBe('search');
+  });
+
+  it('ignores illegal opening book moves and searches normally', () => {
+    const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
+    const key = hashToKey(computeZobristHash(state));
+    const illegalBook: OpeningBook = {
+      positions: {
+        [key]: {
+          positionKey: key,
+          ply: 0,
+          turn: 'CHO',
+          choFormation: 'inner-elephant',
+          hanFormation: 'inner-elephant',
+          moves: [
+            {
+              move: { from: { x: 8, y: 8 }, to: { x: 8, y: 7 } },
+              playCount: 10,
+              winCount: 10,
+              lossCount: 0,
+              drawCount: 0,
+              scoreRate: 1,
+              bookScore: 2,
+              sources: ['bad']
+            }
+          ]
+        }
+      },
+      positionCount: 1,
+      moveCount: 1,
+      sourceGameCount: 1,
+      skippedGameCount: 0,
+      illegalMoveCount: 0,
+      parseFailureCount: 0,
+      createdAt: 'test'
+    };
+
+    const result = searchBestMove(state, { maxDepth: 1, timeMs: 1000 }, {
+      useOpeningBook: true,
+      openingBook: illegalBook,
+      openingBookContext: { minPlayCount: 1 }
+    });
+
+    expect(result.source).toBe('search');
+    expect(result.nodes).toBeGreaterThan(0);
   });
 });
