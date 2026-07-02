@@ -20,6 +20,7 @@ describe('AI worker protocol', () => {
         useOpeningBook: true,
         openingBook: builtInOpeningBook,
         maxCandidates: 3,
+        useTacticalSafety: false,
         table: undefined
       },
       'request-1'
@@ -38,7 +39,8 @@ describe('AI worker protocol', () => {
       openingBook: builtInOpeningBook,
       openingBookContext: undefined,
       maxBookPly: undefined,
-      maxCandidates: 3
+      maxCandidates: 3,
+      useTacticalSafety: false
     });
     expect('table' in request.options!).toBe(false);
   });

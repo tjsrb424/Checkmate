@@ -6,6 +6,7 @@ export * from './evaluation';
 export * from './notation';
 export * from './history';
 export * from './arena';
+export * from './arenaLeague';
 export * from './openingBook';
 export * from './openingBookData';
 export * from './analysis';

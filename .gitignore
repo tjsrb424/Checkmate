@@ -13,5 +13,10 @@ pnpm-debug.log*
 
 data/raw/
 data/opening-book/*.json
+data/arena/*.json
+data/arena/*.csv
+data/arena/*.md
+!data/arena/README.md
+!data/arena/.gitkeep
 *.zip
 *.gib

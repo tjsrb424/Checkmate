@@ -42,6 +42,7 @@ interface SearchContext {
   rootMoveHint?: Move;
   maxCandidates: number;
   safetyCache: Map<string, MoveSafety>;
+  useTacticalSafety: boolean;
 }
 
 export interface SearchCandidate {
@@ -93,6 +94,7 @@ export interface SearchOptions {
   openingBookContext?: OpeningBookLookupOptions;
   maxBookPly?: number;
   maxCandidates?: number;
+  useTacticalSafety?: boolean;
 }
 
 export function chooseBestMove(state: GameState, difficulty: Difficulty): SearchResult {
@@ -124,7 +126,8 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
     maxQuiescenceDepth: options.maxQuiescenceDepth ?? 6,
     includeQuietChecks: options.includeQuietChecks ?? true,
     maxCandidates: options.maxCandidates ?? 5,
-    safetyCache: new Map()
+    safetyCache: new Map(),
+    useTacticalSafety: options.useTacticalSafety !== false
   };
   let bestMove: Move | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
@@ -202,8 +205,8 @@ function searchRoot(state: GameState, depth: number, context: SearchContext): Se
     const result = -negamax(next, depth - 1, Number.NEGATIVE_INFINITY, -alpha, context, 1);
     if (context.timedOut) break;
     const candidateMove = withMovePiece(state, move);
-    const safety = getRootMoveSafety(state, candidateMove, context);
-    const safetyPenalty = safetyPenaltyFor(safety);
+    const safety = context.useTacticalSafety ? getRootMoveSafety(state, candidateMove, context) : undefined;
+    const safetyPenalty = safety ? safetyPenaltyFor(safety) : 0;
     const adjustedScore = applySafetyPenalty(result, safetyPenalty);
     candidates.push({
       move: candidateMove,
@@ -215,8 +218,8 @@ function searchRoot(state: GameState, depth: number, context: SearchContext): Se
       source: 'search',
       pv: [candidateMove],
       safety,
-      riskLevel: safety.riskLevel,
-      riskScore: safety.riskScore
+      riskLevel: safety?.riskLevel,
+      riskScore: safety?.riskScore
     });
     if (adjustedScore > bestScore) {
       bestScore = adjustedScore;
@@ -260,9 +263,9 @@ function tryOpeningBookMove(state: GameState, options: SearchOptions): SearchRes
   const searchCandidates = candidates
     .map((candidate) => {
       const move = withMovePiece(state, candidate.move);
-      const safety = analyzeMoveSafety(state, move);
+      const safety = options.useTacticalSafety === false ? undefined : analyzeMoveSafety(state, move);
       const rawScore = Math.round(candidate.bookScore * 1000);
-      const safetyPenalty = safetyPenaltyFor(safety);
+      const safetyPenalty = safety ? safetyPenaltyFor(safety) : 0;
       const finalScore = applySafetyPenalty(rawScore, safetyPenalty);
       return {
         bookMove: candidate,
@@ -276,8 +279,8 @@ function tryOpeningBookMove(state: GameState, options: SearchOptions): SearchRes
           source: 'book' as const,
           pv: [move],
           safety,
-          riskLevel: safety.riskLevel,
-          riskScore: safety.riskScore
+          riskLevel: safety?.riskLevel,
+          riskScore: safety?.riskScore
         }
       };
     })
