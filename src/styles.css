@@ -1,0 +1,347 @@
+:root {
+  font-family:
+    Inter, Pretendard, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #1d2430;
+  background: #ece7dd;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+select {
+  font: inherit;
+}
+
+.appShell {
+  min-height: 100vh;
+  padding: 28px;
+  background:
+    linear-gradient(90deg, rgba(29, 36, 48, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(29, 36, 48, 0.05) 1px, transparent 1px),
+    #ece7dd;
+  background-size: 32px 32px;
+}
+
+.gameSurface {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.topBar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #7b4f2f;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+h1 {
+  margin: 0;
+  color: #111827;
+  font-size: clamp(2rem, 5vw, 4.7rem);
+  line-height: 0.95;
+}
+
+.statusPanel {
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+  padding: 14px 16px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 252, 245, 0.82);
+}
+
+.statusPanel strong {
+  font-size: 1.12rem;
+}
+
+.statusPanel small {
+  min-height: 1.2em;
+  color: #657186;
+}
+
+.turnBadge {
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: white;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.turnBadge.cho {
+  background: #255f85;
+}
+
+.turnBadge.han {
+  background: #a23b30;
+}
+
+.playLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 22px;
+  align-items: start;
+}
+
+.boardFrame {
+  width: min(100%, 720px);
+  margin-inline: auto;
+  padding: 16px;
+  border: 1px solid rgba(72, 45, 25, 0.22);
+  border-radius: 8px;
+  background: #b98245;
+  box-shadow: 0 26px 70px rgba(51, 35, 21, 0.24);
+}
+
+.janggiBoard {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+  aspect-ratio: 9 / 10;
+  border: 2px solid #4f321f;
+  background:
+    linear-gradient(#4f321f 0 0) 0 0 / 100% 2px,
+    linear-gradient(#4f321f 0 0) 0 100% / 100% 2px,
+    linear-gradient(90deg, #4f321f 0 0) 0 0 / 2px 100%,
+    linear-gradient(90deg, #4f321f 0 0) 100% 0 / 2px 100%,
+    repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), rgba(79, 50, 31, 0.72) calc(12.5% - 1px) calc(12.5% + 1px), transparent calc(12.5% + 1px) 12.5%),
+    repeating-linear-gradient(180deg, transparent 0 calc(11.111% - 1px), rgba(79, 50, 31, 0.72) calc(11.111% - 1px) calc(11.111% + 1px), transparent calc(11.111% + 1px) 11.111%),
+    #d19a59;
+  background-repeat: no-repeat;
+  overflow: hidden;
+}
+
+.janggiBoard::before,
+.janggiBoard::after {
+  content: "";
+  position: absolute;
+  left: 33.333%;
+  width: 33.333%;
+  height: 20%;
+  pointer-events: none;
+  background:
+    linear-gradient(32deg, transparent calc(50% - 1px), #4f321f calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(148deg, transparent calc(50% - 1px), #4f321f calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px));
+}
+
+.janggiBoard::before {
+  top: 0;
+}
+
+.janggiBoard::after {
+  bottom: 0;
+}
+
+.cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.cell::after {
+  content: "";
+  position: absolute;
+  width: 26%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.cell.legalTarget::after {
+  background: rgba(38, 95, 67, 0.42);
+}
+
+.cell.selected::after {
+  width: 74%;
+  border: 2px solid rgba(31, 88, 134, 0.76);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.cell.lastMove {
+  background: rgba(255, 236, 153, 0.23);
+}
+
+.piece {
+  display: grid;
+  place-items: center;
+  width: min(76%, 56px);
+  aspect-ratio: 1;
+  border: 2px solid rgba(70, 45, 27, 0.5);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.86), rgba(255, 244, 217, 0.24) 34%, transparent 35%),
+    #f7dfad;
+  box-shadow: inset 0 -4px 8px rgba(70, 45, 27, 0.18), 0 6px 10px rgba(50, 32, 18, 0.2);
+  font-size: clamp(1.2rem, 4.4vw, 2rem);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.piece.cho {
+  color: #155b88;
+}
+
+.piece.han {
+  color: #aa352c;
+}
+
+.controlRail {
+  display: grid;
+  gap: 14px;
+}
+
+.controlGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.groupLabel {
+  color: #6a7280;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 3px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 252, 245, 0.72);
+}
+
+.segmented button,
+.primaryAction,
+select {
+  min-height: 40px;
+  border: 0;
+  border-radius: 6px;
+  color: #243044;
+  background: transparent;
+  cursor: pointer;
+}
+
+.segmented button.active {
+  color: #fff;
+  background: #26384d;
+}
+
+select {
+  width: 100%;
+  padding-inline: 12px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  background: rgba(255, 252, 245, 0.88);
+}
+
+.primaryAction {
+  color: #fff;
+  background: #7b4f2f;
+  font-weight: 850;
+}
+
+.moveList {
+  display: grid;
+  gap: 8px;
+  min-height: 180px;
+  max-height: 300px;
+  padding: 14px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 252, 245, 0.82);
+  overflow: hidden;
+}
+
+.moveListHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.moveList ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.moveList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-block: 5px;
+  border-bottom: 1px solid rgba(29, 36, 48, 0.08);
+  color: #374151;
+}
+
+.moveList code {
+  color: #182232;
+  font-size: 0.86rem;
+}
+
+@media (max-width: 900px) {
+  .appShell {
+    padding: 18px;
+  }
+
+  .topBar,
+  .playLayout {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .statusPanel {
+    width: 100%;
+  }
+}
+
+@media (max-width: 540px) {
+  .appShell {
+    padding: 10px;
+  }
+
+  .boardFrame {
+    padding: 8px;
+  }
+
+  .piece {
+    width: 82%;
+    font-size: clamp(1rem, 7vw, 1.45rem);
+  }
+
+  .controlRail {
+    gap: 11px;
+  }
+}

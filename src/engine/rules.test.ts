@@ -1,0 +1,146 @@
+import { describe, expect, it } from 'vitest';
+import {
+  Board,
+  GameState,
+  Move,
+  PieceKind,
+  Side,
+  createInitialBoard,
+  emptyBoard,
+  generateLegalMoves,
+  generatePseudoMoves,
+  isCheckmate,
+  isInCheck,
+  pieceMoves,
+  setPiece
+} from './index';
+
+function place(board: Board, x: number, y: number, side: Side, kind: PieceKind): void {
+  setPiece(board, { x, y }, { side, kind });
+}
+
+function hasMove(moves: Move[], fromX: number, fromY: number, toX: number, toY: number): boolean {
+  return moves.some((move) => move.from.x === fromX && move.from.y === fromY && move.to.x === toX && move.to.y === toY);
+}
+
+function state(board: Board, turn: Side = 'CHO'): GameState {
+  return { board, turn, history: [] };
+}
+
+describe('initial formations', () => {
+  it('places all four elephant formations on the home row', () => {
+    const inner = createInitialBoard('inner-elephant', 'outer-elephant');
+    expect(inner[9][1]?.kind).toBe('HORSE');
+    expect(inner[9][2]?.kind).toBe('ELEPHANT');
+    expect(inner[9][6]?.kind).toBe('ELEPHANT');
+    expect(inner[9][7]?.kind).toBe('HORSE');
+
+    expect(inner[0][1]?.kind).toBe('ELEPHANT');
+    expect(inner[0][2]?.kind).toBe('HORSE');
+    expect(inner[0][6]?.kind).toBe('HORSE');
+    expect(inner[0][7]?.kind).toBe('ELEPHANT');
+
+    const left = createInitialBoard('left-elephant', 'right-elephant');
+    expect(left[9][1]?.kind).toBe('HORSE');
+    expect(left[9][2]?.kind).toBe('ELEPHANT');
+    expect(left[9][6]?.kind).toBe('HORSE');
+    expect(left[9][7]?.kind).toBe('ELEPHANT');
+    expect(left[0][1]?.kind).toBe('ELEPHANT');
+    expect(left[0][2]?.kind).toBe('HORSE');
+    expect(left[0][6]?.kind).toBe('ELEPHANT');
+    expect(left[0][7]?.kind).toBe('HORSE');
+  });
+});
+
+describe('piece movement rules', () => {
+  it('blocks horse moves at the first orthogonal step', () => {
+    const board = emptyBoard();
+    place(board, 4, 4, 'CHO', 'HORSE');
+    place(board, 5, 4, 'CHO', 'SOLDIER');
+
+    const moves = pieceMoves(board, { x: 4, y: 4 }, board[4][4]!);
+    expect(hasMove(moves, 4, 4, 6, 5)).toBe(false);
+    expect(hasMove(moves, 4, 4, 6, 3)).toBe(false);
+    expect(hasMove(moves, 4, 4, 5, 6)).toBe(true);
+  });
+
+  it('blocks elephant moves at either intervening point', () => {
+    const board = emptyBoard();
+    place(board, 4, 4, 'CHO', 'ELEPHANT');
+    place(board, 5, 4, 'HAN', 'SOLDIER');
+    place(board, 2, 3, 'HAN', 'SOLDIER');
+
+    const moves = pieceMoves(board, { x: 4, y: 4 }, board[4][4]!);
+    expect(hasMove(moves, 4, 4, 7, 6)).toBe(false);
+    expect(hasMove(moves, 4, 4, 1, 2)).toBe(false);
+    expect(hasMove(moves, 4, 4, 6, 7)).toBe(true);
+  });
+
+  it('requires exactly one non-cannon screen for cannon movement', () => {
+    const board = emptyBoard();
+    place(board, 0, 0, 'CHO', 'CANNON');
+    place(board, 0, 2, 'CHO', 'SOLDIER');
+    place(board, 0, 5, 'HAN', 'HORSE');
+
+    const moves = pieceMoves(board, { x: 0, y: 0 }, board[0][0]!);
+    expect(hasMove(moves, 0, 0, 0, 1)).toBe(false);
+    expect(hasMove(moves, 0, 0, 0, 3)).toBe(true);
+    expect(hasMove(moves, 0, 0, 0, 4)).toBe(true);
+    expect(hasMove(moves, 0, 0, 0, 5)).toBe(true);
+  });
+
+  it('prevents cannons from jumping cannons or capturing cannons', () => {
+    const blockedByCannon = emptyBoard();
+    place(blockedByCannon, 0, 0, 'CHO', 'CANNON');
+    place(blockedByCannon, 0, 2, 'HAN', 'CANNON');
+    expect(pieceMoves(blockedByCannon, { x: 0, y: 0 }, blockedByCannon[0][0]!).length).toBe(0);
+
+    const targetCannon = emptyBoard();
+    place(targetCannon, 0, 0, 'CHO', 'CANNON');
+    place(targetCannon, 0, 2, 'HAN', 'SOLDIER');
+    place(targetCannon, 0, 5, 'HAN', 'CANNON');
+    const moves = pieceMoves(targetCannon, { x: 0, y: 0 }, targetCannon[0][0]!);
+    expect(hasMove(moves, 0, 0, 0, 5)).toBe(false);
+  });
+
+  it('allows palace diagonal movement on marked lines', () => {
+    const board = emptyBoard();
+    place(board, 4, 8, 'CHO', 'GENERAL');
+    const guardBoard = emptyBoard();
+    place(guardBoard, 3, 7, 'CHO', 'GUARD');
+
+    const generalMoves = pieceMoves(board, { x: 4, y: 8 }, board[8][4]!);
+    const guardMoves = pieceMoves(guardBoard, { x: 3, y: 7 }, guardBoard[7][3]!);
+    expect(hasMove(generalMoves, 4, 8, 5, 7)).toBe(true);
+    expect(hasMove(guardMoves, 3, 7, 4, 8)).toBe(true);
+  });
+
+  it('detects check from a chariot', () => {
+    const board = emptyBoard();
+    place(board, 4, 1, 'HAN', 'GENERAL');
+    place(board, 4, 4, 'CHO', 'CHARIOT');
+    expect(isInCheck(board, 'HAN')).toBe(true);
+  });
+
+  it('detects checkmate when the general has no safe palace move', () => {
+    const board = emptyBoard();
+    place(board, 3, 0, 'HAN', 'GENERAL');
+    place(board, 3, 3, 'CHO', 'CHARIOT');
+    place(board, 4, 3, 'CHO', 'CHARIOT');
+
+    expect(isInCheck(board, 'HAN')).toBe(true);
+    expect(isCheckmate(board, 'HAN')).toBe(true);
+  });
+
+  it('filters legal moves that leave the general in check', () => {
+    const board = emptyBoard();
+    place(board, 4, 8, 'CHO', 'GENERAL');
+    place(board, 4, 7, 'CHO', 'GUARD');
+    place(board, 4, 4, 'HAN', 'CHARIOT');
+
+    const legalMoves = generateLegalMoves(state(board, 'CHO'));
+    const pseudoMoves = generatePseudoMoves(board, 'CHO');
+    expect(hasMove(pseudoMoves, 4, 7, 3, 7)).toBe(true);
+    expect(hasMove(legalMoves, 4, 7, 3, 7)).toBe(false);
+  });
+});
