@@ -143,4 +143,69 @@ describe('piece movement rules', () => {
     expect(hasMove(pseudoMoves, 4, 7, 3, 7)).toBe(true);
     expect(hasMove(legalMoves, 4, 7, 3, 7)).toBe(false);
   });
+
+  it('detects facing generals as check', () => {
+    const board = emptyBoard();
+    place(board, 4, 1, 'HAN', 'GENERAL');
+    place(board, 4, 8, 'CHO', 'GENERAL');
+
+    expect(isInCheck(board, 'CHO')).toBe(true);
+    expect(isInCheck(board, 'HAN')).toBe(true);
+  });
+
+  it('prevents moves that expose facing generals', () => {
+    const board = emptyBoard();
+    place(board, 4, 1, 'HAN', 'GENERAL');
+    place(board, 4, 8, 'CHO', 'GENERAL');
+    place(board, 4, 5, 'CHO', 'CHARIOT');
+
+    const pseudoMoves = generatePseudoMoves(board, 'CHO');
+    const legalMoves = generateLegalMoves(state(board, 'CHO'));
+    expect(hasMove(pseudoMoves, 4, 5, 3, 5)).toBe(true);
+    expect(hasMove(legalMoves, 4, 5, 3, 5)).toBe(false);
+  });
+
+  it('allows soldiers to advance diagonally inside the enemy palace only', () => {
+    const board = emptyBoard();
+    place(board, 4, 1, 'CHO', 'SOLDIER');
+    const moves = pieceMoves(board, { x: 4, y: 1 }, board[1][4]!);
+
+    expect(hasMove(moves, 4, 1, 3, 0)).toBe(true);
+    expect(hasMove(moves, 4, 1, 5, 0)).toBe(true);
+    expect(hasMove(moves, 4, 1, 3, 2)).toBe(false);
+    expect(hasMove(moves, 4, 1, 5, 2)).toBe(false);
+  });
+
+  it('allows chariot palace diagonal movement and capture when the line is clear', () => {
+    const board = emptyBoard();
+    place(board, 3, 0, 'CHO', 'CHARIOT');
+    place(board, 5, 2, 'HAN', 'HORSE');
+    const moves = pieceMoves(board, { x: 3, y: 0 }, board[0][3]!);
+    expect(hasMove(moves, 3, 0, 5, 2)).toBe(true);
+
+    place(board, 4, 1, 'CHO', 'SOLDIER');
+    const blockedMoves = pieceMoves(board, { x: 3, y: 0 }, board[0][3]!);
+    expect(hasMove(blockedMoves, 3, 0, 5, 2)).toBe(false);
+  });
+
+  it('allows cannon palace diagonal movement with exactly one non-cannon screen', () => {
+    const board = emptyBoard();
+    place(board, 3, 0, 'CHO', 'CANNON');
+    place(board, 4, 1, 'CHO', 'SOLDIER');
+    place(board, 5, 2, 'HAN', 'HORSE');
+    const moves = pieceMoves(board, { x: 3, y: 0 }, board[0][3]!);
+    expect(hasMove(moves, 3, 0, 5, 2)).toBe(true);
+
+    const cannonScreen = emptyBoard();
+    place(cannonScreen, 3, 0, 'CHO', 'CANNON');
+    place(cannonScreen, 4, 1, 'CHO', 'CANNON');
+    place(cannonScreen, 5, 2, 'HAN', 'HORSE');
+    expect(hasMove(pieceMoves(cannonScreen, { x: 3, y: 0 }, cannonScreen[0][3]!), 3, 0, 5, 2)).toBe(false);
+
+    const cannonTarget = emptyBoard();
+    place(cannonTarget, 3, 0, 'CHO', 'CANNON');
+    place(cannonTarget, 4, 1, 'CHO', 'SOLDIER');
+    place(cannonTarget, 5, 2, 'HAN', 'CANNON');
+    expect(hasMove(pieceMoves(cannonTarget, { x: 3, y: 0 }, cannonTarget[0][3]!), 3, 0, 5, 2)).toBe(false);
+  });
 });

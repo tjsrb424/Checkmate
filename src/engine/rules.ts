@@ -99,6 +99,7 @@ export function isLegalMove(state: GameState, move: Move): boolean {
 export function isInCheck(board: Board, side: Side): boolean {
   const general = findGeneral(board, side);
   if (!general) return true;
+  if (isFacingEnemyGeneral(board, side, general)) return true;
   return isSquareAttacked(board, general, otherSide(side));
 }
 
@@ -114,6 +115,17 @@ export function findGeneral(board: Board, side: Side): Position | null {
     }
   }
   return null;
+}
+
+function isFacingEnemyGeneral(board: Board, side: Side, general: Position): boolean {
+  const enemyGeneral = findGeneral(board, otherSide(side));
+  if (!enemyGeneral || enemyGeneral.x !== general.x) return false;
+
+  const step = enemyGeneral.y > general.y ? 1 : -1;
+  for (let y = general.y + step; y !== enemyGeneral.y; y += step) {
+    if (board[y][general.x]) return false;
+  }
+  return true;
 }
 
 export function isSquareAttacked(board: Board, target: Position, bySide: Side): boolean {
