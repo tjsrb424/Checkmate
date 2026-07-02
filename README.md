@@ -32,6 +32,11 @@ npm run test
 npm run build
 ```
 
+## 기보 데이터
+
+오프닝북 생성용 정제 CSV는 `data/processed/janggi_clean_records.csv` 경로에 둘 수 있습니다.
+원본 ZIP/GIB 파일은 `data/raw/`에 보관하되 기본적으로 Git에 커밋하지 않습니다.
+
 ## 방향
 
 초기 엔진은 TypeScript로 구현되어 있으며, 추후 Rust 또는 C++ 엔진 코어로 분리할 수 있도록 UI와 엔진 모듈을 나누어 둡니다.
