@@ -5,6 +5,7 @@ export * from './ai';
 export * from './evaluation';
 export * from './notation';
 export * from './history';
+export * from './arena';
 export * from './perft';
 export * from './hash';
 export * from './transposition';
