@@ -677,10 +677,12 @@ function AnalysisPanel({
                   <small>
                     {candidate.source} / {candidate.riskLevel ?? 'safe'}
                     {candidate.safety?.risks[0] ? ` / ${candidate.safety.risks[0].reason}` : ''}
-                    {candidate.safety ? ` / swing ${candidate.safety.materialSwing}` : ''}
+                    {candidate.safety
+                      ? ` / raw ${Math.round(candidate.rawScore)} / penalty ${Math.round(candidate.safetyPenalty)} / swing ${candidate.safety.materialSwing}`
+                      : ''}
                   </small>
                 </div>
-                <span>{Math.round(candidate.score)}</span>
+                <span>{Math.round(candidate.finalScore)}</span>
               </li>
             ))}
           </ol>

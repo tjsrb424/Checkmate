@@ -89,7 +89,7 @@ export function analyzeMoveSafety(state: GameState, move: Move, options: SafetyS
     risks.push({
       reason: 'ALLOWS_CHECK',
       level: 'warning',
-      score: 180,
+      score: 500,
       description: 'allows an immediate checking reply'
     });
   }
@@ -117,7 +117,7 @@ export function analyzeMoveSafety(state: GameState, move: Move, options: SafetyS
     risks.push({
       reason: 'BAD_TRADE',
       level: materialSwing <= -1200 ? 'danger' : 'warning',
-      score: Math.round(-materialSwing * 0.75),
+      score: Math.round(-materialSwing * 1.2),
       description: `bad immediate trade ${materialSwing}`
     });
   }
@@ -255,10 +255,10 @@ function hangingReason(kind: PieceKind): TacticalRiskReason {
 }
 
 function hangingRiskScore(hanging: HangingPiece): number {
-  if (hanging.piece.kind === 'CHARIOT') return Math.max(2000, hanging.estimatedLoss);
-  if (hanging.piece.kind === 'CANNON') return Math.max(1200, hanging.estimatedLoss);
-  if (hanging.piece.kind === 'HORSE') return Math.max(800, hanging.estimatedLoss);
-  if (hanging.piece.kind === 'ELEPHANT') return Math.max(500, hanging.estimatedLoss);
+  if (hanging.piece.kind === 'CHARIOT') return Math.max(2500, hanging.estimatedLoss);
+  if (hanging.piece.kind === 'CANNON') return Math.max(1600, hanging.estimatedLoss);
+  if (hanging.piece.kind === 'HORSE') return Math.max(1000, hanging.estimatedLoss);
+  if (hanging.piece.kind === 'ELEPHANT') return Math.max(700, hanging.estimatedLoss);
   return hanging.estimatedLoss;
 }
 

@@ -28,9 +28,18 @@ function hangingChariotBoard(): Board {
   return board;
 }
 
+function compactAnalysisBoard(): Board {
+  const board = emptyBoard();
+  place(board, 4, 8, 'CHO', 'GENERAL');
+  place(board, 4, 1, 'HAN', 'GENERAL');
+  place(board, 4, 5, 'CHO', 'SOLDIER');
+  place(board, 4, 3, 'HAN', 'SOLDIER');
+  return board;
+}
+
 describe('AI analysis tools', () => {
   it('analyzes a position with best move, score, and candidates', () => {
-    const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
+    const state = createGameState(compactAnalysisBoard(), 'CHO');
     const analysis = analyzePosition(state, { limits: { maxDepth: 1, timeMs: 2500 }, maxCandidates: 4 });
 
     expect(analysis.bestMove).not.toBeNull();

@@ -1,6 +1,10 @@
 import { difficultyLimits, MATE_SCORE, searchBestMove } from './ai';
 import type { SearchCandidate, SearchOptions } from './ai';
+import { evaluatePositionBreakdown } from './evaluation';
+import type { EvaluationBreakdown } from './evaluation';
 import { applyMove, createGameState, generateLegalMoves } from './rules';
+import { analyzeMoveSafety, formatMoveSafety } from './tacticalSafety';
+import type { MoveSafety } from './tacticalSafety';
 import { cloneBoard, moveKey } from './types';
 import type { Board, Difficulty, GameState, Move, SearchLimits, Side } from './types';
 
@@ -60,6 +64,14 @@ export interface GameAnalysis {
   blunders: Blunder[];
   error?: string;
   illegalPly?: number;
+}
+
+export interface CandidateEvaluationExplanation {
+  beforeBreakdown: EvaluationBreakdown;
+  afterBreakdown: EvaluationBreakdown;
+  deltaBreakdown: EvaluationBreakdown;
+  safety: MoveSafety;
+  summary: string;
 }
 
 export function analyzePosition(state: GameState, options: AnalyzePositionOptions = {}): PositionAnalysis {
@@ -157,6 +169,25 @@ export function detectBlunders(scoreTimeline: ScoreTimelineEntry[]): Blunder[] {
   });
 }
 
+export function compareEvaluationBeforeAfter(state: GameState, move: Move, side = state.turn): CandidateEvaluationExplanation {
+  const beforeBreakdown = evaluatePositionBreakdown(state, side);
+  const next = applyMove(state, move, false);
+  const afterBreakdown = evaluatePositionBreakdown(next, side);
+  const deltaBreakdown = diffBreakdown(afterBreakdown, beforeBreakdown);
+  const safety = analyzeMoveSafety(state, move);
+  return {
+    beforeBreakdown,
+    afterBreakdown,
+    deltaBreakdown,
+    safety,
+    summary: `total ${beforeBreakdown.total}->${afterBreakdown.total} delta=${deltaBreakdown.total} safety=${formatMoveSafety(safety)}`
+  };
+}
+
+export function explainCandidateEvaluation(state: GameState, candidate: SearchCandidate): CandidateEvaluationExplanation {
+  return compareEvaluationBeforeAfter(state, candidate.move, state.turn);
+}
+
 function classifyLoss(loss: number, scoreBefore: number, scoreAfter: number): BlunderSeverity | null {
   if (scoreBefore > MATE_SCORE / 2 && scoreAfter < MATE_SCORE / 2) return 'losing-blunder';
   if (loss >= 1200) return 'losing-blunder';
@@ -167,4 +198,21 @@ function classifyLoss(loss: number, scoreBefore: number, scoreAfter: number): Bl
 
 function findLegalMove(state: GameState, move: Move): Move | null {
   return generateLegalMoves(state).find((legal) => moveKey(legal) === moveKey(move)) ?? null;
+}
+
+function diffBreakdown(after: EvaluationBreakdown, before: EvaluationBreakdown): EvaluationBreakdown {
+  return {
+    material: after.material - before.material,
+    positional: after.positional - before.positional,
+    mobility: after.mobility - before.mobility,
+    kingSafety: after.kingSafety - before.kingSafety,
+    attackPressure: after.attackPressure - before.attackPressure,
+    chariotActivity: after.chariotActivity - before.chariotActivity,
+    cannonActivity: after.cannonActivity - before.cannonActivity,
+    horseElephantActivity: after.horseElephantActivity - before.horseElephantActivity,
+    soldierStructure: after.soldierStructure - before.soldierStructure,
+    checkPressure: after.checkPressure - before.checkPressure,
+    tacticalSafety: after.tacticalSafety - before.tacticalSafety,
+    total: after.total - before.total
+  };
 }

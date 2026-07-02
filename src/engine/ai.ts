@@ -46,6 +46,9 @@ interface SearchContext {
 
 export interface SearchCandidate {
   move: Move;
+  rawScore: number;
+  safetyPenalty: number;
+  finalScore: number;
   score: number;
   depth: number;
   source: 'book' | 'search';
@@ -145,7 +148,18 @@ export function searchBestMove(state: GameState, limits: SearchLimits, options: 
     bestMove = legalMoves[0] ? withMovePiece(state, legalMoves[0]) : null;
     bestScore = bestMove ? evaluatePosition(applyMove(state, bestMove, false), state.turn) : 0;
     completedCandidates = bestMove
-      ? [{ move: bestMove, score: bestScore, depth: completedDepth, source: 'search', pv: [bestMove] }]
+      ? [
+          {
+            move: bestMove,
+            rawScore: bestScore,
+            safetyPenalty: 0,
+            finalScore: bestScore,
+            score: bestScore,
+            depth: completedDepth,
+            source: 'search',
+            pv: [bestMove]
+          }
+        ]
       : [];
   }
 
@@ -189,9 +203,13 @@ function searchRoot(state: GameState, depth: number, context: SearchContext): Se
     if (context.timedOut) break;
     const candidateMove = withMovePiece(state, move);
     const safety = getRootMoveSafety(state, candidateMove, context);
-    const adjustedScore = applySafetyPenalty(result, safety);
+    const safetyPenalty = safetyPenaltyFor(safety);
+    const adjustedScore = applySafetyPenalty(result, safetyPenalty);
     candidates.push({
       move: candidateMove,
+      rawScore: result,
+      safetyPenalty,
+      finalScore: adjustedScore,
       score: adjustedScore,
       depth,
       source: 'search',
@@ -243,11 +261,17 @@ function tryOpeningBookMove(state: GameState, options: SearchOptions): SearchRes
     .map((candidate) => {
       const move = withMovePiece(state, candidate.move);
       const safety = analyzeMoveSafety(state, move);
+      const rawScore = Math.round(candidate.bookScore * 1000);
+      const safetyPenalty = safetyPenaltyFor(safety);
+      const finalScore = applySafetyPenalty(rawScore, safetyPenalty);
       return {
         bookMove: candidate,
         searchCandidate: {
           move,
-          score: applySafetyPenalty(Math.round(candidate.bookScore * 1000), safety),
+          rawScore,
+          safetyPenalty,
+          finalScore,
+          score: finalScore,
           depth: 0,
           source: 'book' as const,
           pv: [move],
@@ -297,10 +321,13 @@ function alignBestCandidatePv(candidates: SearchCandidate[], bestMove: Move | nu
   return candidates.map((candidate) => (sameMove(candidate.move, bestMove) ? { ...candidate, pv: pv.length > 0 ? pv : [candidate.move] } : candidate));
 }
 
-function applySafetyPenalty(score: number, safety: MoveSafety): number {
+function applySafetyPenalty(score: number, safetyPenalty: number): number {
   if (score > MATE_SCORE / 2) return score;
-  const penalty = scoreMoveSafety(safety);
-  return score - penalty;
+  return score - safetyPenalty;
+}
+
+function safetyPenaltyFor(safety: MoveSafety): number {
+  return scoreMoveSafety(safety);
 }
 
 function getRootMoveSafety(state: GameState, move: Move, context: SearchContext): MoveSafety {
