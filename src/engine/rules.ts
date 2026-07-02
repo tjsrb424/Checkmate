@@ -14,6 +14,7 @@ import {
   samePosition,
   setPiece
 } from './types';
+import { computeZobristHash, hashToKey } from './hash';
 
 const orthogonalDirections: Position[] = [
   { x: 1, y: 0 },
@@ -52,13 +53,14 @@ const palaceLines: Position[][] = [
 ];
 
 export function createGameState(board: Board, turn: Side = 'CHO'): GameState {
-  return { board, turn, history: [] };
+  const state = { board, turn, history: [] };
+  return { ...state, positionHistory: [positionKeyFor(board, turn)] };
 }
 
 export function generateLegalMoves(state: GameState, side = state.turn): Move[] {
   return generatePseudoMoves(state.board, side).filter((move) => {
     const next = applyMove(state, move, false);
-    return !isInCheck(next.board, side);
+    return !isInCheck(next.board, side) && !wouldRepeatPosition(state, move);
   });
 }
 
@@ -75,21 +77,30 @@ export function generatePseudoMoves(board: Board, side: Side): Move[] {
 }
 
 export function applyMove(state: GameState, move: Move, appendHistory = true): GameState {
-  const board = cloneBoard(state.board);
-  const movingPiece = getPiece(board, move.from);
-  const captured = getPiece(board, move.to) ?? undefined;
-  setPiece(board, move.from, null);
-  setPiece(board, move.to, movingPiece);
+  const { board, movingPiece, captured } = applyMoveToBoard(state.board, move);
   const nextTurn = otherSide(state.turn);
+  const nextPositionKey = state.positionHistory ? positionKeyFor(board, nextTurn) : undefined;
   const next: GameState = {
     board,
     turn: nextTurn,
-    history: appendHistory ? [...state.history, { ...move, piece: movingPiece ?? move.piece, captured }] : state.history
+    history: appendHistory ? [...state.history, { ...move, piece: movingPiece ?? move.piece, captured }] : state.history,
+    ...(state.positionHistory && nextPositionKey ? { positionHistory: [...state.positionHistory, nextPositionKey] } : {})
   };
   if (appendHistory && isCheckmate(board, nextTurn)) {
     next.winner = state.turn;
   }
   return next;
+}
+
+export function countPositionOccurrences(state: GameState, positionKey: string): number {
+  return (state.positionHistory ?? []).filter((key) => key === positionKey).length;
+}
+
+export function wouldRepeatPosition(state: GameState, move: Move): boolean {
+  if ((state.positionHistory?.length ?? 0) < 4) return false;
+  const { board } = applyMoveToBoard(state.board, move);
+  const nextPositionKey = positionKeyFor(board, otherSide(state.turn));
+  return countPositionOccurrences(state, nextPositionKey) >= 2;
 }
 
 export function isLegalMove(state: GameState, move: Move): boolean {
@@ -319,4 +330,17 @@ export function isInPalace(pos: Position, side: Side): boolean {
   const minY = side === 'HAN' ? 0 : 7;
   const maxY = side === 'HAN' ? 2 : 9;
   return pos.x >= 3 && pos.x <= 5 && pos.y >= minY && pos.y <= maxY;
+}
+
+function applyMoveToBoard(board: Board, move: Move): { board: Board; movingPiece: Piece | null; captured: Piece | undefined } {
+  const nextBoard = cloneBoard(board);
+  const movingPiece = getPiece(nextBoard, move.from);
+  const captured = getPiece(nextBoard, move.to) ?? undefined;
+  setPiece(nextBoard, move.from, null);
+  setPiece(nextBoard, move.to, movingPiece);
+  return { board: nextBoard, movingPiece, captured };
+}
+
+function positionKeyFor(board: Board, turn: Side): string {
+  return hashToKey(computeZobristHash({ board, turn, history: [] }));
 }

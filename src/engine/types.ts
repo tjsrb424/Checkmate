@@ -37,6 +37,7 @@ export interface GameState {
   board: Board;
   turn: Side;
   history: Move[];
+  positionHistory?: string[];
   winner?: Side;
 }
 

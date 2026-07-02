@@ -11,6 +11,7 @@ import {
   replayGame,
   setPiece,
   undoLastMove,
+  undoMoves,
   undoToHumanTurn
 } from './index';
 
@@ -47,6 +48,8 @@ describe('game history helpers', () => {
 
     expect(replayed.board).toEqual(afterHan.board);
     expect(replayed.turn).toBe(afterHan.turn);
+    expect(replayed.positionHistory).toHaveLength(afterHan.history.length + 1);
+    expect(replayed.positionHistory).toEqual(afterHan.positionHistory);
   });
 
   it('undoes the last move by replaying from the initial board', () => {
@@ -57,6 +60,7 @@ describe('game history helpers', () => {
 
     expect(undone.board).toEqual(afterCho.board);
     expect(undone.history).toHaveLength(1);
+    expect(undone.positionHistory).toHaveLength(2);
   });
 
   it('undoes back to the human turn in a human-vs-AI game', () => {
@@ -67,6 +71,20 @@ describe('game history helpers', () => {
 
     expect(undone.turn).toBe('CHO');
     expect(undone.history).toHaveLength(0);
+    expect(undone.positionHistory).toHaveLength(1);
+  });
+
+  it('truncates and rebuilds position history through undo and redo', () => {
+    const initial = boardForHistory();
+    const firstMove: Move = { from: { x: 0, y: 6 }, to: { x: 0, y: 5 } };
+    const secondMove: Move = { from: { x: 0, y: 3 }, to: { x: 0, y: 4 } };
+    const afterFirst = applyMove(createGameState(initial, 'CHO'), firstMove, true);
+    const afterSecond = applyMove(afterFirst, secondMove, true);
+    const undone = undoMoves(initial, afterSecond.history, 1, 'CHO');
+    const redone = applyMove(undone, secondMove, true);
+
+    expect(undone.positionHistory).toHaveLength(2);
+    expect(redone.positionHistory).toEqual(afterSecond.positionHistory);
   });
 
   it('allows legal redo moves and rejects illegal redo moves', () => {

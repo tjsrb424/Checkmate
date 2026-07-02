@@ -5,6 +5,7 @@ const FNV_OFFSET = 0xcbf29ce484222325n;
 const FNV_PRIME = 0x100000001b3n;
 
 const pieceKinds: PieceKind[] = ['GENERAL', 'GUARD', 'ELEPHANT', 'HORSE', 'CHARIOT', 'CANNON', 'SOLDIER'];
+const randomTokenCache = new Map<string, bigint>();
 
 export function computeZobristHash(state: GameState): bigint {
   return computeBoardHash(state.board, state.turn);
@@ -33,12 +34,16 @@ function randomForPiece(piece: Piece, x: number, y: number): bigint {
 }
 
 function randomForToken(token: string): bigint {
+  const cached = randomTokenCache.get(token);
+  if (cached !== undefined) return cached;
   let hash = FNV_OFFSET;
   for (let i = 0; i < token.length; i += 1) {
     hash ^= BigInt(token.charCodeAt(i));
     hash = (hash * FNV_PRIME) & MASK_64;
   }
-  return splitMix64(hash);
+  const value = splitMix64(hash);
+  randomTokenCache.set(token, value);
+  return value;
 }
 
 function splitMix64(seed: bigint): bigint {

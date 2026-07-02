@@ -5,14 +5,21 @@ import {
   Move,
   PieceKind,
   Side,
+  applyMove,
+  countPositionOccurrences,
+  createGameState,
   createInitialBoard,
   emptyBoard,
   generateLegalMoves,
   generatePseudoMoves,
+  hashToKey,
+  computeZobristHash,
   isCheckmate,
   isInCheck,
+  isLegalMove,
   pieceMoves,
-  setPiece
+  setPiece,
+  wouldRepeatPosition
 } from './index';
 
 function place(board: Board, x: number, y: number, side: Side, kind: PieceKind): void {
@@ -25,6 +32,19 @@ function hasMove(moves: Move[], fromX: number, fromY: number, toX: number, toY: 
 
 function state(board: Board, turn: Side = 'CHO'): GameState {
   return { board, turn, history: [] };
+}
+
+function repeatedPositionBoard(): Board {
+  const board = emptyBoard();
+  place(board, 4, 8, 'CHO', 'GENERAL');
+  place(board, 4, 1, 'HAN', 'GENERAL');
+  place(board, 4, 5, 'CHO', 'SOLDIER');
+  place(board, 0, 5, 'CHO', 'CHARIOT');
+  return board;
+}
+
+function stateKey(game: GameState): string {
+  return hashToKey(computeZobristHash(game));
 }
 
 describe('initial formations', () => {
@@ -207,5 +227,71 @@ describe('piece movement rules', () => {
     place(cannonTarget, 4, 1, 'CHO', 'SOLDIER');
     place(cannonTarget, 5, 2, 'HAN', 'CANNON');
     expect(hasMove(pieceMoves(cannonTarget, { x: 3, y: 0 }, cannonTarget[0][3]!), 3, 0, 5, 2)).toBe(false);
+  });
+});
+
+describe('threefold repetition move ban', () => {
+  it('initializes position history with the initial position key', () => {
+    const game = createGameState(repeatedPositionBoard(), 'CHO');
+
+    expect(game.positionHistory).toEqual([stateKey(game)]);
+  });
+
+  it('accumulates position history even when move history is not appended', () => {
+    const game = createGameState(repeatedPositionBoard(), 'CHO');
+    const next = applyMove(game, { from: { x: 0, y: 5 }, to: { x: 1, y: 5 } }, false);
+
+    expect(next.history).toHaveLength(0);
+    expect(next.positionHistory).toHaveLength(2);
+    expect(next.positionHistory?.[0]).toBe(stateKey(game));
+    expect(next.positionHistory?.[1]).toBe(stateKey(next));
+  });
+
+  it('allows a second occurrence but not a third occurrence', () => {
+    const game = createGameState(repeatedPositionBoard(), 'CHO');
+    const move: Move = { from: { x: 0, y: 5 }, to: { x: 1, y: 5 } };
+    const targetKey = stateKey(applyMove(game, move, false));
+    const currentKey = stateKey(game);
+    const secondOccurrenceState: GameState = {
+      ...game,
+      positionHistory: [targetKey, currentKey]
+    };
+    const thirdOccurrenceState: GameState = {
+      ...game,
+      positionHistory: [targetKey, currentKey, targetKey, currentKey]
+    };
+
+    expect(countPositionOccurrences(secondOccurrenceState, targetKey)).toBe(1);
+    expect(wouldRepeatPosition(secondOccurrenceState, move)).toBe(false);
+    expect(hasMove(generateLegalMoves(secondOccurrenceState), 0, 5, 1, 5)).toBe(true);
+
+    expect(countPositionOccurrences(thirdOccurrenceState, targetKey)).toBe(2);
+    expect(wouldRepeatPosition(thirdOccurrenceState, move)).toBe(true);
+    expect(hasMove(generateLegalMoves(thirdOccurrenceState), 0, 5, 1, 5)).toBe(false);
+  });
+
+  it('prevents moves that create a third repeated position', () => {
+    const game = createGameState(repeatedPositionBoard(), 'CHO');
+    const move: Move = { from: { x: 0, y: 5 }, to: { x: 1, y: 5 } };
+    const targetKey = stateKey(applyMove(game, move, false));
+    const currentKey = stateKey(game);
+    const repeatedState: GameState = {
+      ...game,
+      positionHistory: [targetKey, currentKey, targetKey, currentKey]
+    };
+
+    expect(generateLegalMoves(repeatedState).some((legal) => stateKey(applyMove(repeatedState, legal, false)) === targetKey)).toBe(false);
+  });
+
+  it('makes isLegalMove reject repeated positions', () => {
+    const game = createGameState(repeatedPositionBoard(), 'CHO');
+    const move: Move = { from: { x: 0, y: 5 }, to: { x: 1, y: 5 } };
+    const targetKey = stateKey(applyMove(game, move, false));
+    const repeatedState: GameState = {
+      ...game,
+      positionHistory: [targetKey, stateKey(game), targetKey, stateKey(game)]
+    };
+
+    expect(isLegalMove(repeatedState, move)).toBe(false);
   });
 });
