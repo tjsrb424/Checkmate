@@ -53,6 +53,40 @@ export interface OpeningBook {
   createdAt: string;
 }
 
+export interface OpeningBookTopMove {
+  positionKey: string;
+  ply: number;
+  turn: Side;
+  choFormation: Formation;
+  hanFormation: Formation;
+  move: Move;
+  playCount: number;
+  scoreRate: number;
+  bookScore: number;
+}
+
+export interface OpeningBookTopPosition {
+  positionKey: string;
+  ply: number;
+  turn: Side;
+  choFormation: Formation;
+  hanFormation: Formation;
+  moveCount: number;
+  totalPlayCount: number;
+}
+
+export interface OpeningBookSummary {
+  createdAt: string;
+  positionCount: number;
+  moveCount: number;
+  sourceGameCount: number;
+  skippedGameCount: number;
+  illegalMoveCount: number;
+  parseFailureCount: number;
+  topPositions: OpeningBookTopPosition[];
+  topOpeningMoves: OpeningBookTopMove[];
+}
+
 export interface OpeningBookBuildOptions {
   maxPly?: number;
   minPlayCount?: number;
@@ -127,14 +161,14 @@ export function parseOpeningRecordsCsv(csv: string): OpeningBookRecord[] {
 
   const indexes = new Map(header.map((name, index) => [name.trim(), index]));
   return body.map((row, index) => ({
-    id: getCsvCell(row, indexes, 'id') || getCsvCell(row, indexes, 'game_index') || `record-${index + 1}`,
-    source: getCsvCell(row, indexes, 'source') || undefined,
-    group: getCsvCell(row, indexes, 'group') || undefined,
-    choChalim: getCsvCell(row, indexes, 'cho_chalim'),
-    hanChalim: getCsvCell(row, indexes, 'han_chalim'),
-    result: parseRecordResult(getCsvCell(row, indexes, 'result')),
-    first16: getCsvCell(row, indexes, 'first16'),
-    moves16Ok: parseBooleanCell(getCsvCell(row, indexes, 'moves16_ok'))
+    id: getCsvCellAny(row, indexes, ['id', 'game_index']) || `record-${index + 1}`,
+    source: getCsvCellAny(row, indexes, ['source']) || undefined,
+    group: getCsvCellAny(row, indexes, ['group']) || undefined,
+    choChalim: getCsvCellAny(row, indexes, ['cho_chalim', 'choChalim', '초차림', 'cho_formation']),
+    hanChalim: getCsvCellAny(row, indexes, ['han_chalim', 'hanChalim', '한차림', 'han_formation']),
+    result: parseRecordResult(getCsvCellAny(row, indexes, ['result', 'winner', 'outcome', 'raw_result'])),
+    first16: getCsvCellAny(row, indexes, ['first16', 'first_16', 'opening16', 'moves16']),
+    moves16Ok: parseBooleanCell(getCsvCellAny(row, indexes, ['moves16_ok', 'moves16Ok', 'first16_ok', 'opening_ok']))
   }));
 }
 
@@ -253,6 +287,53 @@ export function isOpeningBookMoveAvailable(
 
 export function describeOpeningBookMove(bookMove: OpeningBookMove): string {
   return `book playCount=${bookMove.playCount} scoreRate=${(bookMove.scoreRate * 100).toFixed(1)}% bookScore=${bookMove.bookScore.toFixed(2)}`;
+}
+
+export function getTopOpeningMoves(book: OpeningBook, top = 20): OpeningBookTopMove[] {
+  return Object.values(book.positions)
+    .flatMap((position) =>
+      position.moves.map((move) => ({
+        positionKey: position.positionKey,
+        ply: position.ply,
+        turn: position.turn,
+        choFormation: position.choFormation,
+        hanFormation: position.hanFormation,
+        move: move.move,
+        playCount: move.playCount,
+        scoreRate: move.scoreRate,
+        bookScore: move.bookScore
+      }))
+    )
+    .sort((a, b) => b.playCount - a.playCount || b.bookScore - a.bookScore || b.scoreRate - a.scoreRate)
+    .slice(0, top);
+}
+
+export function summarizeOpeningBook(book: OpeningBook, options: { top?: number } = {}): OpeningBookSummary {
+  const top = options.top ?? 20;
+  const topPositions = Object.values(book.positions)
+    .map((position) => ({
+      positionKey: position.positionKey,
+      ply: position.ply,
+      turn: position.turn,
+      choFormation: position.choFormation,
+      hanFormation: position.hanFormation,
+      moveCount: position.moves.length,
+      totalPlayCount: position.moves.reduce((sum, move) => sum + move.playCount, 0)
+    }))
+    .sort((a, b) => b.totalPlayCount - a.totalPlayCount || b.moveCount - a.moveCount)
+    .slice(0, top);
+
+  return {
+    createdAt: book.createdAt,
+    positionCount: book.positionCount,
+    moveCount: book.moveCount,
+    sourceGameCount: book.sourceGameCount,
+    skippedGameCount: book.skippedGameCount,
+    illegalMoveCount: book.illegalMoveCount,
+    parseFailureCount: book.parseFailureCount,
+    topPositions,
+    topOpeningMoves: getTopOpeningMoves(book, top)
+  };
 }
 
 export function openingBookToJson(book: OpeningBook): string {
@@ -374,15 +455,25 @@ function getCsvCell(row: string[], indexes: Map<string, number>, name: string): 
   return index === undefined ? '' : (row[index] ?? '').trim();
 }
 
+function getCsvCellAny(row: string[], indexes: Map<string, number>, names: string[]): string {
+  for (const name of names) {
+    const value = getCsvCell(row, indexes, name);
+    if (value) return value;
+  }
+  return '';
+}
+
 function parseBooleanCell(value: string): boolean | undefined {
   if (!value) return undefined;
-  return /^(true|1|yes|y)$/i.test(value);
+  if (/^(true|1|yes|y)$/i.test(value)) return true;
+  if (/^(false|0|no|n)$/i.test(value)) return false;
+  return undefined;
 }
 
 function parseRecordResult(value: string): OpeningBookRecord['result'] {
-  const normalized = value.trim().toLowerCase();
-  if (['cho', '초', '초승', '1-0'].includes(normalized)) return 'cho';
-  if (['han', '한', '한승', '0-1'].includes(normalized)) return 'han';
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, '');
+  if (['cho', '초', '초승', '초승리', '1-0', 'red'].includes(normalized)) return 'cho';
+  if (['han', '한', '한승', '한승리', '0-1', 'blue'].includes(normalized)) return 'han';
   if (['draw', '무', '무승부', '1/2-1/2'].includes(normalized)) return 'draw';
   return 'unknown';
 }

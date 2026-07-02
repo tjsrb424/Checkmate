@@ -12,5 +12,6 @@ yarn-error.log*
 pnpm-debug.log*
 
 data/raw/
+data/opening-book/*.json
 *.zip
 *.gib

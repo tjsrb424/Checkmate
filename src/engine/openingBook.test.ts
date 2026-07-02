@@ -17,7 +17,9 @@ import {
   parseFirst16Moves,
   parseOpeningMoveToken,
   parseOpeningRecordsCsv,
-  resultForSide
+  resultForSide,
+  summarizeOpeningBook,
+  getTopOpeningMoves
 } from './index';
 import { builtInOpeningBook } from './openingBookData';
 
@@ -136,6 +138,23 @@ describe('opening records CSV parsing', () => {
     });
     expect(records[1].moves16Ok).toBe(false);
   });
+
+  it('parses CSV alias columns and broader result values', () => {
+    const csv = [
+      'source,choChalim,han_formation,winner,opening_ok,moves16',
+      'alias,마상상마,마상상마,"한 승",yes,"1.06졸05 2.03병04"'
+    ].join('\n');
+    const records = parseOpeningRecordsCsv(csv);
+
+    expect(records[0]).toMatchObject({
+      source: 'alias',
+      choChalim: '마상상마',
+      hanChalim: '마상상마',
+      result: 'han',
+      moves16Ok: true,
+      first16: '1.06졸05 2.03병04'
+    });
+  });
 });
 
 describe('opening book build and lookup', () => {
@@ -190,6 +209,24 @@ describe('opening book build and lookup', () => {
     expect(restored.positionCount).toBe(book.positionCount);
     expect(restored.moveCount).toBe(book.moveCount);
     expect(Object.keys(restored.positions)).toEqual(Object.keys(book.positions));
+  });
+
+  it('summarizes top positions and moves', () => {
+    const book = buildOpeningBookFromRecords(fixtureRecords(), { minPlayCount: 2 });
+    const summary = summarizeOpeningBook(book, { top: 2 });
+    const topMoves = getTopOpeningMoves(book, 2);
+
+    expect(summary.positionCount).toBe(book.positionCount);
+    expect(summary.moveCount).toBe(book.moveCount);
+    expect(summary.topPositions.length).toBeGreaterThan(0);
+    expect(summary.topOpeningMoves).toEqual(topMoves);
+    expect(topMoves[0]).toMatchObject({
+      ply: expect.any(Number),
+      turn: expect.any(String),
+      playCount: expect.any(Number),
+      scoreRate: expect.any(Number),
+      bookScore: expect.any(Number)
+    });
   });
 
   it('provides a built-in seed book with an initial candidate', () => {

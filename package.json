@@ -7,7 +7,10 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "opening:build": "tsx scripts/build-opening-book.ts",
+    "opening:inspect": "tsx scripts/inspect-opening-book.ts",
+    "opening:test-build": "tsx scripts/build-opening-book.ts --input data/fixtures/opening-records.sample.csv --output data/opening-book/opening-book.sample.json --summary data/opening-book/opening-book-summary.sample.json"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
@@ -20,6 +23,7 @@
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.2",
     "jsdom": "^25.0.1",
+    "tsx": "^4.22.4",
     "vitest": "^4.1.9"
   }
 }

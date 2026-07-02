@@ -1,0 +1,6 @@
+source,group,game_index,cho_chalim,han_chalim,result,moves16_ok,first16
+"fixture,one",A,1,마상상마,마상상마,cho,True,"1.06졸05 2.03병04"
+fixture-two,A,2,마상상마,마상상마,초 승,true,"1.06졸05 2.03병04"
+fixture-three,A,3,마상상마,마상상마,draw,true,"1.06졸05 2.03병04"
+fixture-illegal,B,4,마상상마,마상상마,han,true,"1.88졸87 bad-token"
+fixture-skip,B,5,마상상마,마상상마,han,false,"1.06졸05"
