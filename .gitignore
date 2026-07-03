@@ -16,6 +16,7 @@ data/opening-book/*.json
 data/ml/*.json
 data/ml/*.jsonl
 data/models/
+data/models/checkpoints/
 data/selfplay/*.json
 data/selfplay/*.jsonl
 data/arena/*.json

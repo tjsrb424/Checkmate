@@ -95,6 +95,16 @@ python -m oetongsu_ml.self_play_runner --games 1 --maxPlies 4 --simulations 4 --
 
 It stores sparse MCTS visit distributions as `policy_target` and fills `value_target` after the game outcome is known. Generated files under `data/selfplay/` are ignored by git.
 
+## AlphaZero Training Loop
+
+Sprint 22 adds a tiny end-to-end AlphaZero-style training iteration:
+
+```bash
+npm run ml:az:quick
+```
+
+The quick loop generates self-play data, trains a dual-head `AlphaZeroNet`, writes latest model metrics, and stores a versioned checkpoint under `data/models/checkpoints/`.
+
 ## TypeScript to Python JSON Contract
 
 Positions exported from the TypeScript engine should use this structure:
