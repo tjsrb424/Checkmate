@@ -15,13 +15,7 @@ export interface TrainingExportOptions {
 }
 
 export interface PolicyTrainingExportSample {
-  position: {
-    board: Array<Array<Piece | null>>;
-    turn: Side;
-    history: Array<{ from: Position; to: Position }>;
-    winner: Side | null;
-    metadata: Record<string, string | number | boolean | null>;
-  };
+  position: TrainingPositionJson;
   move: { from: Position; to: Position };
   move_index: number;
   result: OpeningBookRecord['result'];
@@ -31,7 +25,24 @@ export interface PolicyTrainingExportSample {
   hanFormation: Formation;
 }
 
-export interface PolicyTrainingExportStats {
+export interface ValueTrainingExportSample {
+  position: TrainingPositionJson;
+  value: -1 | 0 | 1;
+  result: Exclude<OpeningBookRecord['result'], 'unknown'>;
+  sideToMove: Side;
+  ply: number;
+  source: string;
+}
+
+export interface TrainingPositionJson {
+  board: Array<Array<Piece | null>>;
+  turn: Side;
+  history: Array<{ from: Position; to: Position }>;
+  winner: Side | null;
+  metadata: Record<string, string | number | boolean | null>;
+}
+
+export interface TrainingExportStats {
   recordCount: number;
   sourceGameCount: number;
   sampleCount: number;
@@ -43,18 +54,97 @@ export interface PolicyTrainingExportStats {
 
 export interface PolicyTrainingExportResult {
   samples: PolicyTrainingExportSample[];
-  stats: PolicyTrainingExportStats;
+  stats: TrainingExportStats;
+}
+
+export interface ValueTrainingExportResult {
+  samples: ValueTrainingExportSample[];
+  stats: TrainingExportStats;
 }
 
 export function exportPolicySamplesFromOpeningRecords(
   records: OpeningBookRecord[],
   options: TrainingExportOptions = {}
 ): PolicyTrainingExportResult {
-  const maxPly = options.maxPly ?? 16;
-  const includeUnknownResults = options.includeUnknownResults === true;
   const samples: PolicyTrainingExportSample[] = [];
-  const stats: PolicyTrainingExportStats = {
-    recordCount: records.length,
+  const stats = createStats(records.length);
+
+  walkOpeningRecordPositions(records, options, stats, ({ state, record, move, ply, choFormation, hanFormation }) => {
+    samples.push(
+      createPolicyTrainingSample({
+        state,
+        move,
+        record,
+        ply,
+        choFormation,
+        hanFormation
+      })
+    );
+  });
+
+  stats.sampleCount = samples.length;
+  return { samples, stats };
+}
+
+export function exportValueSamplesFromOpeningRecords(
+  records: OpeningBookRecord[],
+  options: TrainingExportOptions = {}
+): ValueTrainingExportResult {
+  const samples: ValueTrainingExportSample[] = [];
+  const stats = createStats(records.length);
+
+  walkOpeningRecordPositions(records, { ...options, includeUnknownResults: false }, stats, ({ state, record, ply, choFormation, hanFormation }) => {
+    const value = valueForResult(record.result, state.turn);
+    if (value === null) return;
+    const knownResult = record.result as Exclude<OpeningBookRecord['result'], 'unknown'>;
+    const source = record.source ?? record.id;
+    samples.push({
+      position: createTrainingPositionJson(state, {
+        recordId: record.id,
+        source,
+        ply,
+        sideToMove: state.turn,
+        outcomeForSide: resultForSide(record.result, state.turn),
+        choFormation,
+        hanFormation
+      }),
+      value,
+      result: knownResult,
+      sideToMove: state.turn,
+      ply,
+      source
+    });
+  });
+
+  stats.sampleCount = samples.length;
+  return { samples, stats };
+}
+
+export function policySampleToJsonLine(sample: PolicyTrainingExportSample): string {
+  return JSON.stringify(sample);
+}
+
+export function policySamplesToJsonl(samples: PolicyTrainingExportSample[]): string {
+  return samples.map(policySampleToJsonLine).join('\n') + (samples.length > 0 ? '\n' : '');
+}
+
+export function valueSampleToJsonLine(sample: ValueTrainingExportSample): string {
+  return JSON.stringify(sample);
+}
+
+export function valueSamplesToJsonl(samples: ValueTrainingExportSample[]): string {
+  return samples.map(valueSampleToJsonLine).join('\n') + (samples.length > 0 ? '\n' : '');
+}
+
+export function moveToPolicyIndex(move: Move): number {
+  validatePosition(move.from);
+  validatePosition(move.to);
+  return (((move.from.x * BOARD_HEIGHT + move.from.y) * BOARD_WIDTH + move.to.x) * BOARD_HEIGHT + move.to.y);
+}
+
+function createStats(recordCount: number): TrainingExportStats {
+  return {
+    recordCount,
     sourceGameCount: 0,
     sampleCount: 0,
     skippedGameCount: 0,
@@ -62,7 +152,23 @@ export function exportPolicySamplesFromOpeningRecords(
     parseFailureCount: 0,
     unknownResultSkipCount: 0
   };
+}
 
+function walkOpeningRecordPositions(
+  records: OpeningBookRecord[],
+  options: TrainingExportOptions,
+  stats: TrainingExportStats,
+  visit: (input: {
+    state: GameState;
+    move: Move;
+    record: OpeningBookRecord;
+    ply: number;
+    choFormation: Formation;
+    hanFormation: Formation;
+  }) => void
+): void {
+  const maxPly = options.maxPly ?? 16;
+  const includeUnknownResults = options.includeUnknownResults === true;
   for (const record of records) {
     if (record.moves16Ok === false) {
       stats.skippedGameCount += 1;
@@ -100,36 +206,10 @@ export function exportPolicySamplesFromOpeningRecords(
         break;
       }
 
-      samples.push(
-        createPolicyTrainingSample({
-          state,
-          move: legalMove,
-          record,
-          ply,
-          choFormation,
-          hanFormation
-        })
-      );
+      visit({ state, move: legalMove, record, ply, choFormation, hanFormation });
       state = applyMove(state, legalMove, true);
     }
   }
-
-  stats.sampleCount = samples.length;
-  return { samples, stats };
-}
-
-export function policySampleToJsonLine(sample: PolicyTrainingExportSample): string {
-  return JSON.stringify(sample);
-}
-
-export function policySamplesToJsonl(samples: PolicyTrainingExportSample[]): string {
-  return samples.map(policySampleToJsonLine).join('\n') + (samples.length > 0 ? '\n' : '');
-}
-
-export function moveToPolicyIndex(move: Move): number {
-  validatePosition(move.from);
-  validatePosition(move.to);
-  return (((move.from.x * BOARD_HEIGHT + move.from.y) * BOARD_WIDTH + move.to.x) * BOARD_HEIGHT + move.to.y);
 }
 
 function createPolicyTrainingSample(input: {
@@ -142,21 +222,15 @@ function createPolicyTrainingSample(input: {
 }): PolicyTrainingExportSample {
   const source = input.record.source ?? input.record.id;
   return {
-    position: {
-      board: cloneBoardForJson(input.state.board),
-      turn: input.state.turn,
-      history: input.state.history.map((move) => ({ from: { ...move.from }, to: { ...move.to } })),
-      winner: input.state.winner ?? null,
-      metadata: {
-        recordId: input.record.id,
-        source,
-        ply: input.ply,
-        sideToMove: input.state.turn,
-        outcomeForSide: resultForSide(input.record.result, input.state.turn),
-        choFormation: input.choFormation,
-        hanFormation: input.hanFormation
-      }
-    },
+    position: createTrainingPositionJson(input.state, {
+      recordId: input.record.id,
+      source,
+      ply: input.ply,
+      sideToMove: input.state.turn,
+      outcomeForSide: resultForSide(input.record.result, input.state.turn),
+      choFormation: input.choFormation,
+      hanFormation: input.hanFormation
+    }),
     move: { from: { ...input.move.from }, to: { ...input.move.to } },
     move_index: moveToPolicyIndex(input.move),
     result: input.record.result,
@@ -165,6 +239,27 @@ function createPolicyTrainingSample(input: {
     choFormation: input.choFormation,
     hanFormation: input.hanFormation
   };
+}
+
+function createTrainingPositionJson(
+  state: GameState,
+  metadata: Record<string, string | number | boolean | null>
+): TrainingPositionJson {
+  return {
+    board: cloneBoardForJson(state.board),
+    turn: state.turn,
+    history: state.history.map((move) => ({ from: { ...move.from }, to: { ...move.to } })),
+    winner: state.winner ?? null,
+    metadata
+  };
+}
+
+function valueForResult(result: OpeningBookRecord['result'], sideToMove: Side): -1 | 0 | 1 | null {
+  const outcome = resultForSide(result, sideToMove);
+  if (outcome === 'win') return 1;
+  if (outcome === 'loss') return -1;
+  if (outcome === 'draw') return 0;
+  return null;
 }
 
 function findMatchingLegalMove(state: GameState, move: Move): Move | null {

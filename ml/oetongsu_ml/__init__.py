@@ -2,7 +2,7 @@
 
 from .constants import BOARD_HEIGHT, BOARD_WIDTH, ENCODER_CHANNELS, POLICY_SIZE
 from .encoder import decode_piece_planes, encode_position, side_to_move_planes
-from .model import PolicyNet, count_parameters
+from .model import PolicyNet, ValueNet, count_parameters
 from .move_index import index_to_move, is_valid_policy_index, legal_moves_to_mask, move_to_index
 from .schema import (
     Move,
@@ -34,5 +34,6 @@ __all__ = [
     "is_valid_policy_index",
     "legal_moves_to_mask",
     "PolicyNet",
+    "ValueNet",
     "count_parameters",
 ]

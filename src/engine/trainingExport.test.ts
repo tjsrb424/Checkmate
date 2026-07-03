@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   OpeningBookRecord,
   exportPolicySamplesFromOpeningRecords,
+  exportValueSamplesFromOpeningRecords,
   formationToChalimString,
   moveToPolicyIndex,
   parseOpeningRecordsCsv,
   policySampleToJsonLine,
-  policySamplesToJsonl
+  policySamplesToJsonl,
+  valueSampleToJsonLine,
+  valueSamplesToJsonl
 } from './index';
 
 function fixtureRecords(): OpeningBookRecord[] {
@@ -90,5 +93,64 @@ describe('policy training export', () => {
     expect(samples[1].position.turn).toBe('HAN');
     expect(samples[1].position.history).toHaveLength(1);
     expect(samples[1].position.metadata.outcomeForSide).toBe('loss');
+  });
+});
+
+describe('value training export', () => {
+  it('exports value samples from legal positions and skips unknown results', () => {
+    const result = exportValueSamplesFromOpeningRecords(fixtureRecords(), { maxPly: 16 });
+
+    expect(result.stats).toMatchObject({
+      recordCount: 3,
+      sourceGameCount: 2,
+      sampleCount: 2,
+      skippedGameCount: 1,
+      illegalMoveCount: 1,
+      parseFailureCount: 1,
+      unknownResultSkipCount: 1
+    });
+
+    expect(result.samples[0]).toMatchObject({
+      value: 1,
+      result: 'cho',
+      sideToMove: 'CHO',
+      ply: 0,
+      source: 'fixture-1'
+    });
+    expect(result.samples[1]).toMatchObject({
+      value: -1,
+      result: 'cho',
+      sideToMove: 'HAN',
+      ply: 1
+    });
+    expect(result.samples[0].position.board).toHaveLength(10);
+    expect(result.samples[0].position.metadata.outcomeForSide).toBe('win');
+  });
+
+  it('maps draws to zero value', () => {
+    const innerElephant = formationToChalimString('inner-elephant');
+    const { samples } = exportValueSamplesFromOpeningRecords([
+      {
+        id: 'draw',
+        choChalim: innerElephant,
+        hanChalim: innerElephant,
+        result: 'draw',
+        first16: '1.06P05',
+        moves16Ok: true
+      }
+    ]);
+
+    expect(samples).toHaveLength(1);
+    expect(samples[0].value).toBe(0);
+  });
+
+  it('serializes value JSONL rows', () => {
+    const { samples } = exportValueSamplesFromOpeningRecords(fixtureRecords(), { maxPly: 1 });
+    const line = valueSampleToJsonLine(samples[0]);
+    const jsonl = valueSamplesToJsonl(samples);
+
+    expect(JSON.parse(line).value).toBe(1);
+    expect(jsonl.endsWith('\n')).toBe(true);
+    expect(jsonl.trim().split('\n')).toHaveLength(1);
   });
 });

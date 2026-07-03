@@ -23,5 +23,25 @@ class PolicyNet(nn.Module):
         return self.net(x.float())
 
 
+class ValueNet(nn.Module):
+    def __init__(self, channels: int = 64) -> None:
+        super().__init__()
+        self.channels = channels
+        self.net = nn.Sequential(
+            nn.Conv2d(ENCODER_CHANNELS, channels, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(channels * BOARD_HEIGHT * BOARD_WIDTH, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1),
+            nn.Tanh(),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x.float())
+
+
 def count_parameters(model: nn.Module) -> int:
     return sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)

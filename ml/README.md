@@ -56,7 +56,16 @@ Evaluate the checkpoint:
 python -m oetongsu_ml.evaluate_policy --model ../data/models/policy_net.sample.pt --data ../data/ml/policy_samples.sample.jsonl
 ```
 
-The default `PolicyNet` uses 64 convolution channels and is intended as a simple baseline. CPU smoke runs can lower `--channels`; real training should use a larger dataset and preferably GPU acceleration.
+Export and train the first value network:
+
+```bash
+npm run ml:export-value:sample
+cd ml
+python -m oetongsu_ml.train_value --data ../data/ml/value_samples.sample.jsonl --output ../data/models/value_net.sample.pt --epochs 1 --batchSize 2 --channels 8
+python -m oetongsu_ml.evaluate_value --model ../data/models/value_net.sample.pt --data ../data/ml/value_samples.sample.jsonl
+```
+
+The default `PolicyNet` and `ValueNet` use 64 convolution channels and are intended as simple baselines. CPU smoke runs can lower `--channels`; real training should use a larger dataset and preferably GPU acceleration.
 
 ## TypeScript to Python JSON Contract
 
