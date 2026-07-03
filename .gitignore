@@ -12,6 +12,10 @@ yarn-error.log*
 pnpm-debug.log*
 
 data/raw/
+data/processed/*.csv
+data/processed/*.json
+!data/processed/.gitkeep
+!data/processed/README.md
 data/opening-book/*.json
 data/ml/*.json
 data/ml/*.jsonl
