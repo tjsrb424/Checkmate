@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { alphaZeroSupervisedSamplesToJsonl, exportAlphaZeroSupervisedSamplesFromOpeningRecords, parseOpeningRecordsCsv } from '../src/engine';
+import { alphaZeroSupervisedSampleToJsonLine, exportAlphaZeroSupervisedSamplesFromOpeningRecords, parseOpeningRecordsCsv } from '../src/engine';
 
 interface ExportAzSupervisedCliOptions {
   input: string;
@@ -40,7 +40,7 @@ function main(): void {
 
     mkdirSync(dirname(outputPath), { recursive: true });
     mkdirSync(dirname(summaryPath), { recursive: true });
-    writeFileSync(outputPath, alphaZeroSupervisedSamplesToJsonl(exported.samples), 'utf8');
+    writeAlphaZeroSamplesJsonl(outputPath, exported.samples);
     writeFileSync(
       summaryPath,
       JSON.stringify(
@@ -123,6 +123,21 @@ function parseNumber(option: string, value: string | undefined): number {
   const parsed = Number(requireValue(option, value));
   if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`Invalid number for ${option}: ${value}`);
   return parsed;
+}
+
+function writeAlphaZeroSamplesJsonl(
+  outputPath: string,
+  samples: Parameters<typeof alphaZeroSupervisedSampleToJsonLine>[0][]
+): void {
+  writeFileSync(outputPath, '', 'utf8');
+  const chunkSize = 1000;
+  for (let offset = 0; offset < samples.length; offset += chunkSize) {
+    const chunk = samples
+      .slice(offset, offset + chunkSize)
+      .map(alphaZeroSupervisedSampleToJsonLine)
+      .join('\n');
+    appendFileSync(outputPath, `${chunk}\n`, 'utf8');
+  }
 }
 
 main();
