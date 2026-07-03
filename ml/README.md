@@ -115,6 +115,18 @@ npm run ml:model-arena:quick
 
 Promotion rule: a candidate is marked `promoted` when its arena score rate is at least 55% with zero forfeits and zero illegal moves. Quick mode is only a smoke check; meaningful promotion needs many more games.
 
+## Rule Parity Hotfix Checks
+
+Python self-play rules must stay aligned with the TypeScript game engine. The Python `TrainingPosition` stores `position_history`, and `generate_legal_moves` bans moves that would create a third occurrence of the same board plus turn.
+
+Run the fast rule checks before AutoTrain work:
+
+```bash
+npm run ml:rules:quick
+```
+
+These checks include initial-position perft snapshots and repetition-ban behavior.
+
 ## TypeScript to Python JSON Contract
 
 Positions exported from the TypeScript engine should use this structure:

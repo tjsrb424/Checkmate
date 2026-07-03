@@ -22,7 +22,8 @@
     "ml:export-value:sample": "tsx scripts/export-value-data.ts --input data/fixtures/opening-records.sample.csv --output data/ml/value_samples.sample.jsonl --summary data/ml/value_samples_summary.sample.json",
     "ml:selfplay:quick": "node scripts/run-self-play.cjs --games 1 --maxPlies 4 --simulations 4 --randomModel",
     "ml:az:quick": "node scripts/run-az-training.cjs --games 1 --maxPlies 4 --simulations 4 --epochs 1 --batchSize 2 --channels 8",
-    "ml:model-arena:quick": "node scripts/promote-model.cjs --randomModel --games 2 --maxPlies 4 --simulations 2 --version random_candidate_quick"
+    "ml:model-arena:quick": "node scripts/promote-model.cjs --randomModel --games 2 --maxPlies 4 --simulations 2 --version random_candidate_quick",
+    "ml:rules:quick": "node scripts/run-ml-tests.cjs tests/test_python_rules_repetition.py tests/test_python_perft.py"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",

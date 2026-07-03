@@ -54,6 +54,7 @@ class TrainingPosition:
     board: list[list[Piece | None]]
     turn: Side
     history: list[Move] = field(default_factory=list)
+    position_history: list[str] = field(default_factory=list)
     winner: Side | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -63,10 +64,12 @@ class TrainingPosition:
             return raw
         board = [[Piece.from_raw(cell) for cell in row] for row in raw["board"]]
         history = [Move.from_raw(move) for move in raw.get("history", [])]
+        position_history = [str(key) for key in raw.get("position_history", raw.get("positionHistory", []))]
         return cls(
             board=board,
             turn=raw["turn"],
             history=history,
+            position_history=position_history,
             winner=raw.get("winner"),
             metadata=dict(raw.get("metadata", {})),
         )
@@ -76,6 +79,7 @@ class TrainingPosition:
             "board": [[asdict(cell) if cell else None for cell in row] for row in self.board],
             "turn": self.turn,
             "history": [move.to_json() for move in self.history],
+            "position_history": self.position_history,
             "winner": self.winner,
             "metadata": self.metadata,
         }
@@ -171,4 +175,3 @@ def to_jsonable(value: Any) -> Any:
     if is_dataclass(value):
         return asdict(value)
     return value
-

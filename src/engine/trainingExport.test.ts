@@ -63,6 +63,7 @@ describe('policy training export', () => {
     expect(first.position.board[0]).toHaveLength(9);
     expect(first.position.turn).toBe('CHO');
     expect(first.position.history).toEqual([]);
+    expect(first.position.positionHistory).toHaveLength(1);
     expect(first.move).toEqual({ from: { x: 0, y: 6 }, to: { x: 0, y: 5 } });
     expect(first.move_index).toBe(moveToPolicyIndex(first.move));
     expect(first.choFormation).toBe('inner-elephant');
@@ -92,6 +93,7 @@ describe('policy training export', () => {
     expect(stats.sampleCount).toBe(2);
     expect(samples[1].position.turn).toBe('HAN');
     expect(samples[1].position.history).toHaveLength(1);
+    expect(samples[1].position.positionHistory).toHaveLength(2);
     expect(samples[1].position.metadata.outcomeForSide).toBe('loss');
   });
 });

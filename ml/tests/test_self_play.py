@@ -21,6 +21,8 @@ def test_self_play_game_generates_samples():
     assert result.outcome in {"checkmate", "draw_max_plies", "draw_no_legal_moves", "loss_no_legal_moves"}
     assert all(sample.policy_target for sample in result.samples)
     assert all(sample.value_target in (-1.0, 0.0, 1.0) for sample in result.samples)
+    assert all(sample.position.position_history for sample in result.samples)
+    assert [len(sample.position.position_history) for sample in result.samples] == list(range(1, len(result.samples) + 1))
 
 
 def test_self_play_respects_max_plies_draw():

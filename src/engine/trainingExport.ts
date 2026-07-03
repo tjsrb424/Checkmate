@@ -38,6 +38,7 @@ export interface TrainingPositionJson {
   board: Array<Array<Piece | null>>;
   turn: Side;
   history: Array<{ from: Position; to: Position }>;
+  positionHistory: string[];
   winner: Side | null;
   metadata: Record<string, string | number | boolean | null>;
 }
@@ -249,6 +250,7 @@ function createTrainingPositionJson(
     board: cloneBoardForJson(state.board),
     turn: state.turn,
     history: state.history.map((move) => ({ from: { ...move.from }, to: { ...move.to } })),
+    positionHistory: state.positionHistory ?? [],
     winner: state.winner ?? null,
     metadata
   };

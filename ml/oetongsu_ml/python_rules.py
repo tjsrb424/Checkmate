@@ -60,9 +60,11 @@ def create_initial_position(
     board: list[list[Piece | None]] = [[None for _ in range(9)] for _ in range(10)]
     place_side(board, "HAN", han_formation)
     place_side(board, "CHO", cho_formation)
+    initial_key = board_position_key(board, turn)
     return TrainingPosition(
         board=board,
         turn=turn,
+        position_history=[initial_key],
         metadata={"choFormation": cho_formation, "hanFormation": han_formation},
     )
 
@@ -73,7 +75,7 @@ def generate_legal_moves(position: TrainingPosition | dict, side: Side | None = 
     moves: list[Move] = []
     for move in generate_pseudo_moves(parsed, moving_side):
         next_position = apply_move(parsed, move, append_history=False)
-        if not is_in_check(next_position, moving_side):
+        if not is_in_check(next_position, moving_side) and not would_repeat_position(parsed, move):
             moves.append(move)
     return moves
 
@@ -92,14 +94,49 @@ def generate_pseudo_moves(position: TrainingPosition | dict, side: Side) -> list
 def apply_move(position: TrainingPosition | dict, move: Move | dict, append_history: bool = True) -> TrainingPosition:
     parsed = TrainingPosition.from_raw(position)
     parsed_move = Move.from_raw(move)
-    board = clone_board(parsed.board)
-    moving_piece = get_piece(board, parsed_move.from_)
-    board[parsed_move.from_.y][parsed_move.from_.x] = None
-    board[parsed_move.to.y][parsed_move.to.x] = moving_piece
+    board = apply_move_to_board(parsed.board, parsed_move)
     next_turn = other_side(parsed.turn)
+    next_key = board_position_key(board, next_turn)
     history = [*parsed.history, parsed_move] if append_history else list(parsed.history)
+    position_history = [*normalized_position_history(parsed), next_key]
     winner = parsed.turn if append_history and is_checkmate_board(board, next_turn) else None
-    return TrainingPosition(board=board, turn=next_turn, history=history, winner=winner, metadata=dict(parsed.metadata))
+    return TrainingPosition(
+        board=board,
+        turn=next_turn,
+        history=history,
+        position_history=position_history,
+        winner=winner,
+        metadata=dict(parsed.metadata),
+    )
+
+
+def position_key(position: TrainingPosition | dict) -> str:
+    parsed = TrainingPosition.from_raw(position)
+    return board_position_key(parsed.board, parsed.turn)
+
+
+def board_position_key(board: list[list[Piece | None]], turn: Side) -> str:
+    rows = []
+    for row in board:
+        cells = []
+        for piece in row:
+            cells.append("." if piece is None else f"{piece.side}:{piece.kind}")
+        rows.append(",".join(cells))
+    return f"{turn}|{'/'.join(rows)}"
+
+
+def count_position_occurrences(position: TrainingPosition | dict, key: str) -> int:
+    parsed = TrainingPosition.from_raw(position)
+    return normalized_position_history(parsed).count(key)
+
+
+def would_repeat_position(position: TrainingPosition | dict, move: Move | dict) -> bool:
+    parsed = TrainingPosition.from_raw(position)
+    if len(normalized_position_history(parsed)) < 4:
+        return False
+    next_board = apply_move_to_board(parsed.board, Move.from_raw(move))
+    next_key = board_position_key(next_board, other_side(parsed.turn))
+    return count_position_occurrences(parsed, next_key) >= 2
 
 
 def is_checkmate(position: TrainingPosition | dict, side: Side) -> bool:
@@ -318,6 +355,18 @@ def in_bounds(pos: Position) -> bool:
 
 def clone_board(board: list[list[Piece | None]]) -> list[list[Piece | None]]:
     return [[Piece(piece.side, piece.kind) if piece is not None else None for piece in row] for row in board]
+
+
+def apply_move_to_board(board: list[list[Piece | None]], move: Move) -> list[list[Piece | None]]:
+    next_board = clone_board(board)
+    moving_piece = get_piece(next_board, move.from_)
+    next_board[move.from_.y][move.from_.x] = None
+    next_board[move.to.y][move.to.x] = moving_piece
+    return next_board
+
+
+def normalized_position_history(position: TrainingPosition) -> list[str]:
+    return position.position_history if position.position_history else [position_key(position)]
 
 
 def place_side(board: list[list[Piece | None]], side: Side, formation: Formation) -> None:

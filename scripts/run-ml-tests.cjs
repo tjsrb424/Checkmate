@@ -8,7 +8,7 @@ const winPython = join(mlDir, ".venv", "Scripts", "python.exe");
 const posixPython = join(mlDir, ".venv", "bin", "python");
 const python = existsSync(winPython) ? winPython : existsSync(posixPython) ? posixPython : "python";
 
-const result = spawnSync(python, ["-m", "pytest"], {
+const result = spawnSync(python, ["-m", "pytest", ...process.argv.slice(2)], {
   cwd: mlDir,
   stdio: "inherit",
   shell: false
