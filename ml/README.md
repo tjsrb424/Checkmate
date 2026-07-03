@@ -78,6 +78,23 @@ python -m oetongsu_ml.mcts_demo
 
 The prototype includes a Python rules adapter, random and torch-backed policy/value inference, legal-move prior masking, visit-count policy targets, and smoke tests. It is not yet wired into self-play or the React game UI.
 
+## Self-Play Data
+
+Sprint 21 adds a first JSONL self-play generator:
+
+```bash
+npm run ml:selfplay:quick
+```
+
+Direct Python usage is also available:
+
+```bash
+cd ml
+python -m oetongsu_ml.self_play_runner --games 1 --maxPlies 4 --simulations 4 --randomModel
+```
+
+It stores sparse MCTS visit distributions as `policy_target` and fills `value_target` after the game outcome is known. Generated files under `data/selfplay/` are ignored by git.
+
 ## TypeScript to Python JSON Contract
 
 Positions exported from the TypeScript engine should use this structure:

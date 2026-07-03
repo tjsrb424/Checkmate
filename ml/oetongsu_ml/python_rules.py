@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from .schema import Move, Piece, Position, Side, TrainingPosition
 
+Formation = str
+
+FORMATION_HOME_PIECES: dict[Formation, dict[int, str]] = {
+    "inner-elephant": {1: "HORSE", 2: "ELEPHANT", 6: "ELEPHANT", 7: "HORSE"},
+    "outer-elephant": {1: "ELEPHANT", 2: "HORSE", 6: "HORSE", 7: "ELEPHANT"},
+    "left-elephant": {1: "ELEPHANT", 2: "HORSE", 6: "ELEPHANT", 7: "HORSE"},
+    "right-elephant": {1: "HORSE", 2: "ELEPHANT", 6: "HORSE", 7: "ELEPHANT"},
+}
+
 ORTHOGONAL_DIRECTIONS = (
     Position(1, 0),
     Position(-1, 0),
@@ -41,6 +50,21 @@ PALACE_LINES = (
 
 def other_side(side: Side) -> Side:
     return "HAN" if side == "CHO" else "CHO"
+
+
+def create_initial_position(
+    cho_formation: Formation = "inner-elephant",
+    han_formation: Formation = "inner-elephant",
+    turn: Side = "CHO",
+) -> TrainingPosition:
+    board: list[list[Piece | None]] = [[None for _ in range(9)] for _ in range(10)]
+    place_side(board, "HAN", han_formation)
+    place_side(board, "CHO", cho_formation)
+    return TrainingPosition(
+        board=board,
+        turn=turn,
+        metadata={"choFormation": cho_formation, "hanFormation": han_formation},
+    )
 
 
 def generate_legal_moves(position: TrainingPosition | dict, side: Side | None = None) -> list[Move]:
@@ -294,3 +318,26 @@ def in_bounds(pos: Position) -> bool:
 
 def clone_board(board: list[list[Piece | None]]) -> list[list[Piece | None]]:
     return [[Piece(piece.side, piece.kind) if piece is not None else None for piece in row] for row in board]
+
+
+def place_side(board: list[list[Piece | None]], side: Side, formation: Formation) -> None:
+    if formation not in FORMATION_HOME_PIECES:
+        raise ValueError(f"unknown formation: {formation}")
+    home_y = 0 if side == "HAN" else 9
+    general_y = 1 if side == "HAN" else 8
+    cannon_y = 2 if side == "HAN" else 7
+    soldier_y = 3 if side == "HAN" else 6
+
+    board[home_y][0] = Piece(side, "CHARIOT")
+    board[home_y][8] = Piece(side, "CHARIOT")
+    board[home_y][3] = Piece(side, "GUARD")
+    board[home_y][5] = Piece(side, "GUARD")
+    board[general_y][4] = Piece(side, "GENERAL")
+    board[cannon_y][1] = Piece(side, "CANNON")
+    board[cannon_y][7] = Piece(side, "CANNON")
+
+    for x in (0, 2, 4, 6, 8):
+        board[soldier_y][x] = Piece(side, "SOLDIER")
+
+    for x, kind in FORMATION_HOME_PIECES[formation].items():
+        board[home_y][x] = Piece(side, kind)

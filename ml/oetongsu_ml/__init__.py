@@ -14,6 +14,7 @@ from .schema import (
     ValueTrainingSample,
 )
 from .inference import PolicyValueModel, RandomPolicyValueModel, TorchPolicyValueModel
+from .self_play import SelfPlayConfig, SelfPlayGameResult, play_self_play_game
 
 __all__ = [
     "BOARD_HEIGHT",
@@ -40,4 +41,7 @@ __all__ = [
     "PolicyValueModel",
     "RandomPolicyValueModel",
     "TorchPolicyValueModel",
+    "SelfPlayConfig",
+    "SelfPlayGameResult",
+    "play_self_play_game",
 ]
