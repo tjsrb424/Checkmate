@@ -15,6 +15,7 @@ import {
   setPiece
 } from './types';
 import { computeZobristHash, hashToKey } from './hash';
+import { JanggiRuleset, RulesetId, resolveRuleset } from './ruleset';
 
 const orthogonalDirections: Position[] = [
   { x: 1, y: 0 },
@@ -57,10 +58,11 @@ export function createGameState(board: Board, turn: Side = 'CHO'): GameState {
   return { ...state, positionHistory: [positionKeyFor(board, turn)] };
 }
 
-export function generateLegalMoves(state: GameState, side = state.turn): Move[] {
+export function generateLegalMoves(state: GameState, side = state.turn, ruleset?: RulesetId | JanggiRuleset): Move[] {
+  const activeRuleset = resolveRuleset(ruleset);
   return generatePseudoMoves(state.board, side).filter((move) => {
     const next = applyMove(state, move, false);
-    return !isInCheck(next.board, side) && !wouldRepeatPosition(state, move);
+    return !isInCheck(next.board, side) && !wouldRepeatPosition(state, move, activeRuleset);
   });
 }
 
@@ -96,15 +98,16 @@ export function countPositionOccurrences(state: GameState, positionKey: string):
   return (state.positionHistory ?? []).filter((key) => key === positionKey).length;
 }
 
-export function wouldRepeatPosition(state: GameState, move: Move): boolean {
+export function wouldRepeatPosition(state: GameState, move: Move, ruleset?: RulesetId | JanggiRuleset): boolean {
+  if (resolveRuleset(ruleset).repetitionPolicy !== 'ban-third-position') return false;
   if ((state.positionHistory?.length ?? 0) < 4) return false;
   const { board } = applyMoveToBoard(state.board, move);
   const nextPositionKey = positionKeyFor(board, otherSide(state.turn));
   return countPositionOccurrences(state, nextPositionKey) >= 2;
 }
 
-export function isLegalMove(state: GameState, move: Move): boolean {
-  return generateLegalMoves(state).some((legal) => samePosition(legal.from, move.from) && samePosition(legal.to, move.to));
+export function isLegalMove(state: GameState, move: Move, ruleset?: RulesetId | JanggiRuleset): boolean {
+  return generateLegalMoves(state, state.turn, ruleset).some((legal) => samePosition(legal.from, move.from) && samePosition(legal.to, move.to));
 }
 
 export function isInCheck(board: Board, side: Side): boolean {

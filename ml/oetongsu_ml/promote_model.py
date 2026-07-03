@@ -44,6 +44,7 @@ def main(argv: list[str] | None = None) -> None:
             temperature=args.temperature,
             seed=args.seed,
             promotion_threshold=args.threshold,
+            ruleset_id=args.ruleset,
         ),
     )
     arena_json = arena_result.to_json()
@@ -79,6 +80,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", default="../data/models/arena/model_arena_latest.json")
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--randomModel", action="store_true")
+    parser.add_argument("--ruleset", choices=["oetongsu-basic", "kakao-like", "kja-like"], default="kakao-like")
     return parser.parse_args(argv)
 
 

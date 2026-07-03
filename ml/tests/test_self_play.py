@@ -18,7 +18,7 @@ def test_self_play_game_generates_samples():
     assert result.game_id == "unit"
     assert 0 < len(result.samples) <= 4
     assert result.plies <= 4
-    assert result.outcome in {"checkmate", "draw_max_plies", "draw_no_legal_moves", "loss_no_legal_moves"}
+    assert result.outcome in {"checkmate", "draw_max_plies", "score_adjudication", "draw_no_legal_moves", "loss_no_legal_moves"}
     assert all(sample.policy_target for sample in result.samples)
     assert all(sample.value_target in (-1.0, 0.0, 1.0) for sample in result.samples)
     assert all(sample.position.position_history for sample in result.samples)
@@ -28,13 +28,24 @@ def test_self_play_game_generates_samples():
 def test_self_play_respects_max_plies_draw():
     result = play_self_play_game(
         RandomPolicyValueModel(seed=3),
-        SelfPlayConfig(game_id="short", max_plies=2, mcts_simulations=2, temperature=0, seed=9),
+        SelfPlayConfig(game_id="short", max_plies=2, mcts_simulations=2, temperature=0, seed=9, ruleset_id="oetongsu-basic"),
     )
 
     assert result.plies <= 2
     assert result.outcome == "draw_max_plies"
     assert result.winner is None
     assert all(sample.value_target == 0.0 for sample in result.samples)
+
+
+def test_self_play_can_score_adjudicate_max_plies():
+    result = play_self_play_game(
+        RandomPolicyValueModel(seed=23),
+        SelfPlayConfig(game_id="score", max_plies=1, mcts_simulations=1, temperature=0, seed=3, ruleset_id="kakao-like"),
+    )
+
+    assert result.outcome == "score_adjudication"
+    assert result.winner == "HAN"
+    assert [sample.value_target for sample in result.samples] == [-1.0]
 
 
 def test_self_play_jsonl_round_trip():

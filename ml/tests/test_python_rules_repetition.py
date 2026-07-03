@@ -7,6 +7,7 @@ from oetongsu_ml.python_rules import (
     position_key,
     would_repeat_position,
 )
+from oetongsu_ml.ruleset import JanggiRuleset
 from oetongsu_ml.schema import Move, Piece, Position, TrainingPosition
 
 
@@ -91,3 +92,25 @@ def test_banned_repetition_move_is_not_legal():
     legal_moves = generate_legal_moves(position)
 
     assert forbidden not in legal_moves
+
+
+def test_repetition_can_be_disabled_by_ruleset():
+    position = tiny_repeat_position()
+    target_board = [[cell for cell in row] for row in position.board]
+    target_board[6][0] = None
+    target_board[5][0] = Piece(side="CHO", kind="SOLDIER")
+    target_key = board_position_key(target_board, "HAN")
+    position.position_history = [position_key(position), target_key, "other", target_key]
+    repeated = Move(Position(0, 6), Position(0, 5))
+    repetition_off = JanggiRuleset(
+        id="oetongsu-basic",
+        label="repetition off",
+        repetition_policy="off",
+        bikjang_policy="off",
+        pass_policy="off",
+        scoring_policy="off",
+        max_ply_policy="draw",
+    )
+
+    assert would_repeat_position(position, repeated, "oetongsu-basic") is True
+    assert would_repeat_position(position, repeated, repetition_off) is False

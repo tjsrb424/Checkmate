@@ -17,3 +17,5 @@ export * from './perft';
 export * from './hash';
 export * from './transposition';
 export * from './trainingExport';
+export * from './ruleset';
+export * from './scoring';

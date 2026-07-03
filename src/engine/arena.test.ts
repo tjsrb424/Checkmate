@@ -87,6 +87,20 @@ describe('AI arena', () => {
     }
   });
 
+  it('can adjudicate max plies by material score', () => {
+    const result = runArenaGame({
+      gameId: 'score-adjudication-1',
+      choPlayer: quickPlayer('cho'),
+      hanPlayer: quickPlayer('han'),
+      maxPlies: 0,
+      ruleset: 'kakao-like'
+    });
+
+    expect(result.outcome).toBe('HAN_WIN');
+    expect(result.winner).toBe('HAN');
+    expect(result.finalScore).toBe(-1.5);
+  });
+
   it('swaps sides across a series', () => {
     const result = runArenaSeries({
       seriesId: 'swap',

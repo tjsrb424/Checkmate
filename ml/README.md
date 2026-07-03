@@ -132,6 +132,12 @@ python -m oetongsu_ml.autotrain --iterations 10 --gamesPerIteration 100 --simula
 
 AutoTrain writes `data/training/autotrain_state.json`, `autotrain_log.jsonl`, and `autotrain_summary.json`. Quick mode is only a smoke test; real strength gains require much larger self-play counts and should be preceded by `npm run ml:rules:quick`.
 
+## Kakao-Like Ruleset
+
+Pre-Sprint 24B defines explicit TS/Python rulesets before larger self-play runs. Python self-play and model arena can use the `kakao-like` ruleset, which keeps third-position repetition bans and adjudicates max-ply endings by material score with Han deom 1.5.
+
+The ruleset is documented in `docs/JANGGI_RULESET.md`. Pass and detailed bikjang fault adjudication remain documented TODOs until the exact online-service behavior is verified and the policy index can encode pass safely.
+
 ## Rule Parity Hotfix Checks
 
 Python self-play rules must stay aligned with the TypeScript game engine. The Python `TrainingPosition` stores `position_history`, and `generate_legal_moves` bans moves that would create a third occurrence of the same board plus turn.

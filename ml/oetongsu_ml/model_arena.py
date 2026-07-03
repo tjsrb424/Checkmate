@@ -7,6 +7,8 @@ from typing import Any
 from .inference import PolicyValueModel, RandomPolicyValueModel, TorchAlphaZeroModel
 from .mcts import MCTSConfig, run_mcts
 from .python_rules import apply_move, create_initial_position, generate_legal_moves, is_in_check, other_side
+from .ruleset import RulesetId, resolve_ruleset
+from .scoring import score_board_material
 from .schema import Move, Side, TrainingPosition
 
 
@@ -19,6 +21,7 @@ class ModelArenaConfig:
     temperature: float = 0.0
     seed: int = 1
     promotion_threshold: float = 0.55
+    ruleset_id: RulesetId = "kakao-like"
 
 
 @dataclass
@@ -55,7 +58,7 @@ class MCTSModelPlayer(ModelPlayer):
         result = run_mcts(
             position,
             self.model,
-            MCTSConfig(simulations=config.simulations, temperature=config.temperature),
+            MCTSConfig(simulations=config.simulations, temperature=config.temperature, ruleset_id=config.ruleset_id),
         )
         return result.move
 
@@ -124,6 +127,7 @@ def play_arena_game(
     config: ModelArenaConfig,
     game_index: int,
 ) -> dict[str, Any]:
+    ruleset = resolve_ruleset(config.ruleset_id)
     position = create_initial_position()
     illegal_moves = 0
     forfeits = 0
@@ -131,7 +135,7 @@ def play_arena_game(
     outcome = "draw_max_plies"
 
     for ply in range(config.max_plies):
-        legal_moves = generate_legal_moves(position)
+        legal_moves = generate_legal_moves(position, ruleset=ruleset)
         if not legal_moves:
             if is_in_check(position, position.turn):
                 winner = other_side(position.turn)
@@ -156,6 +160,12 @@ def play_arena_game(
             outcome = "checkmate"
             break
     else:
+        if ruleset.max_ply_policy == "score-adjudication":
+            score = score_board_material(position.board)
+            winner = score["winner"] if score["winner"] in ("CHO", "HAN") else None
+            outcome = "score_adjudication" if winner is not None else "draw_max_plies"
+        else:
+            outcome = "draw_max_plies"
         ply = config.max_plies - 1
 
     return {

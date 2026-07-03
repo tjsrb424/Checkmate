@@ -11,9 +11,11 @@ from .inference import PolicyValueModel
 from .mcts import MCTSConfig, MCTSResult, run_mcts
 from .move_index import index_to_move, is_valid_policy_index, move_to_index
 from .python_rules import apply_move, create_initial_position, generate_legal_moves, is_in_check, other_side
+from .ruleset import RulesetId, resolve_ruleset
+from .scoring import score_board_material
 from .schema import Move, Side, TrainingPosition
 
-Outcome = Literal["checkmate", "draw_max_plies", "draw_no_legal_moves", "loss_no_legal_moves"]
+Outcome = Literal["checkmate", "draw_max_plies", "score_adjudication", "draw_no_legal_moves", "loss_no_legal_moves"]
 
 
 @dataclass
@@ -27,6 +29,7 @@ class SelfPlayConfig:
     record_history: bool = True
     cpuct: float = 1.5
     max_depth: int = 200
+    ruleset_id: RulesetId = "kakao-like"
 
 
 @dataclass
@@ -85,6 +88,7 @@ class SelfPlayGameResult:
 
 def play_self_play_game(model: PolicyValueModel, config: SelfPlayConfig | None = None) -> SelfPlayGameResult:
     cfg = config or SelfPlayConfig()
+    ruleset = resolve_ruleset(cfg.ruleset_id)
     rng = np.random.default_rng(cfg.seed)
     position = create_initial_position()
     pending_samples: list[PendingSelfPlaySample] = []
@@ -93,7 +97,7 @@ def play_self_play_game(model: PolicyValueModel, config: SelfPlayConfig | None =
     outcome: Outcome = "draw_max_plies"
 
     for ply in range(cfg.max_plies):
-        legal_moves = generate_legal_moves(position)
+        legal_moves = generate_legal_moves(position, ruleset=ruleset)
         if len(legal_moves) == 0:
             if is_in_check(position, position.turn):
                 winner = other_side(position.turn)
@@ -108,6 +112,7 @@ def play_self_play_game(model: PolicyValueModel, config: SelfPlayConfig | None =
             cpuct=cfg.cpuct,
             temperature=temperature,
             max_depth=cfg.max_depth,
+            ruleset_id=ruleset.id,
         )
         mcts_result = run_mcts(position, model, mcts_config)
         move = select_move(mcts_result, temperature, rng)
@@ -132,7 +137,12 @@ def play_self_play_game(model: PolicyValueModel, config: SelfPlayConfig | None =
             outcome = "checkmate"
             break
     else:
-        outcome = "draw_max_plies"
+        if ruleset.max_ply_policy == "score-adjudication":
+            score = score_board_material(position.board)
+            winner = score["winner"] if score["winner"] in ("CHO", "HAN") else None
+            outcome = "score_adjudication" if winner is not None else "draw_max_plies"
+        else:
+            outcome = "draw_max_plies"
 
     samples = finalize_samples(pending_samples, winner)
     return SelfPlayGameResult(

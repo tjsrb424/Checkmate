@@ -36,3 +36,18 @@ def test_quick_model_arena_finishes():
 
     assert result.games == 1
     assert result.gameSummaries
+
+
+def test_model_arena_can_score_adjudicate_max_plies():
+    result = run_model_arena(
+        RandomModelPlayer(name="candidate", seed=7),
+        RandomModelPlayer(name="champion", seed=8),
+        ModelArenaConfig(games=1, simulations=1, max_plies=0, temperature=0, ruleset_id="kakao-like"),
+    )
+
+    assert result.games == 1
+    assert result.candidateWins == 0
+    assert result.championWins == 1
+    assert result.draws == 0
+    assert result.gameSummaries[0]["outcome"] == "score_adjudication"
+    assert result.gameSummaries[0]["winner"] == "HAN"

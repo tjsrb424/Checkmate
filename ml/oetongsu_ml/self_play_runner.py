@@ -27,6 +27,7 @@ def main(argv: list[str] | None = None) -> None:
             temperature=args.temperature,
             temperature_drop_ply=args.temperatureDropPly,
             seed=args.seed + game_index if args.seed is not None else None,
+            ruleset_id=args.ruleset,
         )
         result = play_self_play_game(model, config)
         all_samples.extend(result.samples)
@@ -68,6 +69,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--temperatureDropPly", type=int, default=20)
     parser.add_argument("--gameIdPrefix", default="selfplay")
+    parser.add_argument("--ruleset", choices=["oetongsu-basic", "kakao-like", "kja-like"], default="kakao-like")
     return parser.parse_args(argv)
 
 

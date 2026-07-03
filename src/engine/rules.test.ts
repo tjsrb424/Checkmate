@@ -316,4 +316,26 @@ describe('threefold repetition move ban', () => {
 
     expect(isLegalMove(repeatedState, move)).toBe(false);
   });
+
+  it('allows repeated positions when the ruleset repetition policy is off', () => {
+    const game = createGameState(repeatedPositionBoard(), 'CHO');
+    const move: Move = { from: { x: 0, y: 5 }, to: { x: 1, y: 5 } };
+    const targetKey = stateKey(applyMove(game, move, false));
+    const repeatedState: GameState = {
+      ...game,
+      positionHistory: [targetKey, stateKey(game), targetKey, stateKey(game)]
+    };
+    const repetitionOff = {
+      id: 'oetongsu-basic' as const,
+      label: 'repetition off',
+      repetitionPolicy: 'off' as const,
+      bikjangPolicy: 'off' as const,
+      passPolicy: 'off' as const,
+      scoringPolicy: 'off' as const,
+      maxPlyPolicy: 'draw' as const
+    };
+
+    expect(wouldRepeatPosition(repeatedState, move, repetitionOff)).toBe(false);
+    expect(isLegalMove(repeatedState, move, repetitionOff)).toBe(true);
+  });
 });

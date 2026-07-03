@@ -11,6 +11,9 @@ import { createInitialBoard } from './setup';
 import { difficultyLimits, searchBestMove } from './ai';
 import type { SearchOptions, SearchResult } from './ai';
 import type { OpeningBook, OpeningBookLookupOptions } from './openingBook';
+import type { JanggiRuleset, RulesetId } from './ruleset';
+import { resolveRuleset } from './ruleset';
+import { scoreBoardMaterial } from './scoring';
 
 export type ArenaGameOutcome = 'CHO_WIN' | 'HAN_WIN' | 'DRAW' | 'FORFEIT';
 export type ArenaForfeitReason = 'NO_MOVE' | 'ILLEGAL_MOVE' | 'SEARCH_ERROR';
@@ -44,6 +47,7 @@ export interface ArenaGameConfig {
   maxPlies?: number;
   recordMoves?: boolean;
   recordSearchStats?: boolean;
+  ruleset?: RulesetId | JanggiRuleset;
 }
 
 export interface ArenaSeriesConfig {
@@ -56,6 +60,7 @@ export interface ArenaSeriesConfig {
   swapSides?: boolean;
   recordMoves?: boolean;
   recordSearchStats?: boolean;
+  ruleset?: RulesetId | JanggiRuleset;
 }
 
 export interface FormationPair {
@@ -142,6 +147,7 @@ export function runArenaGame(config: ArenaGameConfig): ArenaGameResult {
   const maxPlies = config.maxPlies ?? 200;
   const recordMoves = config.recordMoves !== false;
   const recordSearchStats = config.recordSearchStats === true;
+  const ruleset = resolveRuleset(config.ruleset);
   let state = createGameState(createInitialBoard(choFormation, hanFormation), config.startingTurn ?? 'CHO');
   const searchSummaries: ArenaMoveSummary[] = [];
   let finalScore: number | undefined;
@@ -166,7 +172,7 @@ export function runArenaGame(config: ArenaGameConfig): ArenaGameResult {
       return buildForfeitResult(config, state, choFormation, hanFormation, side, 'NO_MOVE', recordMoves, searchSummaries, finalScore);
     }
 
-    if (!isLegalMove(state, result.move)) {
+    if (!isLegalMove(state, result.move, ruleset)) {
       return buildForfeitResult(config, state, choFormation, hanFormation, side, 'ILLEGAL_MOVE', recordMoves, searchSummaries, finalScore);
     }
 
@@ -181,9 +187,12 @@ export function runArenaGame(config: ArenaGameConfig): ArenaGameResult {
     }
   }
 
-  return buildGameResult(config, state, choFormation, hanFormation, 'DRAW', {
+  const material = ruleset.maxPlyPolicy === 'score-adjudication' ? scoreBoardMaterial(state.board) : undefined;
+  const winner = material?.winner === 'CHO' || material?.winner === 'HAN' ? material.winner : undefined;
+  return buildGameResult(config, state, choFormation, hanFormation, winner === 'CHO' ? 'CHO_WIN' : winner === 'HAN' ? 'HAN_WIN' : 'DRAW', {
+    winner,
     history: recordMoves ? state.history : [],
-    finalScore,
+    finalScore: material ? material.cho - material.han : finalScore,
     searchSummaries: recordSearchStats ? searchSummaries : undefined
   });
 }
@@ -206,7 +215,8 @@ export function runArenaSeries(config: ArenaSeriesConfig): ArenaSeriesResult {
         hanFormation: pair.hanFormation,
         maxPlies: config.maxPlies,
         recordMoves: config.recordMoves,
-        recordSearchStats: config.recordSearchStats
+        recordSearchStats: config.recordSearchStats,
+        ruleset: config.ruleset
       })
     );
   }

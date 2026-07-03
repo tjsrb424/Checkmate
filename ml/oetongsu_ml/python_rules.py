@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .ruleset import JanggiRuleset, RulesetId, resolve_ruleset
 from .schema import Move, Piece, Position, Side, TrainingPosition
 
 Formation = str
@@ -69,13 +70,14 @@ def create_initial_position(
     )
 
 
-def generate_legal_moves(position: TrainingPosition | dict, side: Side | None = None) -> list[Move]:
+def generate_legal_moves(position: TrainingPosition | dict, side: Side | None = None, ruleset: RulesetId | JanggiRuleset | None = None) -> list[Move]:
     parsed = TrainingPosition.from_raw(position)
     moving_side = side or parsed.turn
+    active_ruleset = resolve_ruleset(ruleset)
     moves: list[Move] = []
     for move in generate_pseudo_moves(parsed, moving_side):
         next_position = apply_move(parsed, move, append_history=False)
-        if not is_in_check(next_position, moving_side) and not would_repeat_position(parsed, move):
+        if not is_in_check(next_position, moving_side) and not would_repeat_position(parsed, move, active_ruleset):
             moves.append(move)
     return moves
 
@@ -130,7 +132,9 @@ def count_position_occurrences(position: TrainingPosition | dict, key: str) -> i
     return normalized_position_history(parsed).count(key)
 
 
-def would_repeat_position(position: TrainingPosition | dict, move: Move | dict) -> bool:
+def would_repeat_position(position: TrainingPosition | dict, move: Move | dict, ruleset: RulesetId | JanggiRuleset | None = None) -> bool:
+    if resolve_ruleset(ruleset).repetition_policy != "ban-third-position":
+        return False
     parsed = TrainingPosition.from_raw(position)
     if len(normalized_position_history(parsed)) < 4:
         return False

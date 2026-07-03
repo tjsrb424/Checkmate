@@ -10,6 +10,7 @@ from .inference import PolicyValueModel
 from .move_index import move_to_index
 from .python_rules import apply_move, generate_legal_moves, is_in_check
 from .schema import Move, TrainingPosition
+from .ruleset import RulesetId
 
 
 @dataclass
@@ -20,6 +21,7 @@ class MCTSConfig:
     dirichlet_alpha: float = 0.3
     dirichlet_epsilon: float = 0.0
     max_depth: int = 200
+    ruleset_id: RulesetId = "oetongsu-basic"
 
 
 @dataclass
@@ -59,7 +61,7 @@ def run_mcts(position: TrainingPosition | dict, model: PolicyValueModel, config:
     parsed = TrainingPosition.from_raw(position)
     cfg = config or MCTSConfig()
     root = MCTSNode(position=parsed, to_play=parsed.turn)
-    legal_moves = generate_legal_moves(parsed)
+    legal_moves = generate_legal_moves(parsed, ruleset=cfg.ruleset_id)
     if len(legal_moves) == 0:
         value = terminal_value(parsed)
         return build_result(root, cfg, value)
@@ -76,7 +78,7 @@ def run_mcts(position: TrainingPosition | dict, model: PolicyValueModel, config:
             search_path.append(node)
             depth += 1
 
-        legal = generate_legal_moves(node.position)
+        legal = generate_legal_moves(node.position, ruleset=cfg.ruleset_id)
         if len(legal) == 0:
             value = terminal_value(node.position)
         elif depth >= cfg.max_depth:
@@ -99,7 +101,7 @@ def expand(
     add_dirichlet_noise: bool = False,
     config: MCTSConfig | None = None,
 ) -> tuple[np.ndarray, float]:
-    legal_moves = generate_legal_moves(node.position)
+    legal_moves = generate_legal_moves(node.position, ruleset=(config.ruleset_id if config else None))
     policy_probs, value = model.predict(node.position)
     priors = normalize_legal_priors(policy_probs, legal_moves)
 

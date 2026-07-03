@@ -11,6 +11,7 @@ from uuid import uuid4
 from .inference import RandomPolicyValueModel, TorchAlphaZeroModel
 from .model_arena import ModelArenaConfig, RandomModelPlayer, TorchModelPlayer, run_model_arena
 from .model_registry import get_latest_promoted, load_registry, promote_candidate, register_candidate, reject_candidate, save_registry
+from .ruleset import RulesetId
 from .self_play import SelfPlayConfig, play_self_play_game, self_play_samples_to_jsonl
 from .train_alphazero import train_alphazero
 
@@ -33,6 +34,7 @@ class AutoTrainConfig:
     temperature: float = 1.0
     temperature_drop_ply: int = 20
     seed: int = 1
+    ruleset_id: RulesetId = "kakao-like"
     registry_path: str = "../data/models/registry.json"
     training_dir: str = "../data/training"
     selfplay_dir: str = "../data/selfplay"
@@ -63,6 +65,7 @@ class AutoTrainConfig:
             temperature=self.temperature,
             temperature_drop_ply=self.temperature_drop_ply,
             seed=self.seed,
+            ruleset_id=self.ruleset_id,
             registry_path=self.registry_path,
             training_dir=self.training_dir,
             selfplay_dir=self.selfplay_dir,
@@ -259,6 +262,7 @@ def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str 
                 temperature=cfg.temperature,
                 temperature_drop_ply=cfg.temperature_drop_ply,
                 seed=cfg.seed + iteration * 1000 + game_index,
+                ruleset_id=cfg.ruleset_id,
             ),
         )
         all_samples.extend(result.samples)
@@ -288,6 +292,7 @@ def run_candidate_arena(cfg: AutoTrainConfig, candidate_version: str, checkpoint
             temperature=0.0,
             seed=cfg.seed,
             promotion_threshold=cfg.promotion_threshold,
+            ruleset_id=cfg.ruleset_id,
         ),
     )
 
@@ -385,6 +390,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--temperatureDropPly", type=int, default=20)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--ruleset", choices=["oetongsu-basic", "kakao-like", "kja-like"], default="kakao-like")
     parser.add_argument("--registry", default="../data/models/registry.json")
     parser.add_argument("--trainingDir", default="../data/training")
     parser.add_argument("--selfplayDir", default="../data/selfplay")
@@ -415,6 +421,7 @@ def config_from_args(args: argparse.Namespace) -> AutoTrainConfig:
         temperature=args.temperature,
         temperature_drop_ply=args.temperatureDropPly,
         seed=args.seed,
+        ruleset_id=args.ruleset,
         registry_path=args.registry,
         training_dir=args.trainingDir,
         selfplay_dir=args.selfplayDir,
