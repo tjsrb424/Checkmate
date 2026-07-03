@@ -20,3 +20,9 @@ data/arena/*.md
 !data/arena/.gitkeep
 *.zip
 *.gib
+
+__pycache__/
+.pytest_cache/
+ml/.venv/
+ml/**/__pycache__/
+ml/.pytest_cache/
