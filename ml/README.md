@@ -67,6 +67,17 @@ python -m oetongsu_ml.evaluate_value --model ../data/models/value_net.sample.pt 
 
 The default `PolicyNet` and `ValueNet` use 64 convolution channels and are intended as simple baselines. CPU smoke runs can lower `--channels`; real training should use a larger dataset and preferably GPU acceleration.
 
+## MCTS Prototype
+
+Sprint 20 adds a first Python-side policy/value MCTS prototype:
+
+```bash
+cd ml
+python -m oetongsu_ml.mcts_demo
+```
+
+The prototype includes a Python rules adapter, random and torch-backed policy/value inference, legal-move prior masking, visit-count policy targets, and smoke tests. It is not yet wired into self-play or the React game UI.
+
 ## TypeScript to Python JSON Contract
 
 Positions exported from the TypeScript engine should use this structure:

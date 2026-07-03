@@ -13,6 +13,7 @@ from .schema import (
     TrainingPosition,
     ValueTrainingSample,
 )
+from .inference import PolicyValueModel, RandomPolicyValueModel, TorchPolicyValueModel
 
 __all__ = [
     "BOARD_HEIGHT",
@@ -36,4 +37,7 @@ __all__ = [
     "PolicyNet",
     "ValueNet",
     "count_parameters",
+    "PolicyValueModel",
+    "RandomPolicyValueModel",
+    "TorchPolicyValueModel",
 ]
