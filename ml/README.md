@@ -132,6 +132,29 @@ python -m oetongsu_ml.autotrain --iterations 10 --gamesPerIteration 100 --simula
 
 AutoTrain writes `data/training/autotrain_state.json`, `autotrain_log.jsonl`, and `autotrain_summary.json`. Quick mode is only a smoke test; real strength gains require much larger self-play counts and should be preceded by `npm run ml:rules:quick`.
 
+## Initial Champion Bootstrap
+
+Sprint 25 adds a supervised AlphaZero bootstrap path so AutoTrain can start from an opening-record model instead of a random champion.
+
+Sample smoke:
+
+```bash
+npm run ml:export-az-supervised:sample
+npm run ml:bootstrap-champion:sample
+npm run ml:autotrain:quick
+```
+
+Real local start:
+
+```bash
+npm run ml:export-az-supervised
+cd ml
+python -m oetongsu_ml.bootstrap_champion --data ../data/ml/az_supervised_samples.jsonl --epochs 10 --batchSize 64 --channels 64 --version supervised_v0001
+python -m oetongsu_ml.autotrain --iterations 10 --gamesPerIteration 100 --simulations 64 --trainEpochs 2 --promotionGames 40 --threshold 0.55
+```
+
+`supervised_v0001` is an opening-record bootstrap champion, not proof of playing strength. Strength should be judged only through repeated AutoTrain iterations and arena promotion.
+
 ## Kakao-Like Ruleset
 
 Pre-Sprint 24B defines explicit TS/Python rulesets before larger self-play runs. Python self-play and model arena can use the `kakao-like` ruleset, which keeps third-position repetition bans and adjudicates max-ply endings by material score with Han deom 1.5.

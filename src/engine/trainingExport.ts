@@ -34,6 +34,17 @@ export interface ValueTrainingExportSample {
   source: string;
 }
 
+export interface AlphaZeroSupervisedExportSample {
+  position: TrainingPositionJson;
+  policy_target: Array<{ index: number; prob: number }>;
+  value_target: -1 | 0 | 1;
+  move: { from: Position; to: Position };
+  ply: number;
+  game_id: string;
+  to_play: Side;
+  final_winner: Side | null;
+}
+
 export interface TrainingPositionJson {
   board: Array<Array<Piece | null>>;
   turn: Side;
@@ -60,6 +71,11 @@ export interface PolicyTrainingExportResult {
 
 export interface ValueTrainingExportResult {
   samples: ValueTrainingExportSample[];
+  stats: TrainingExportStats;
+}
+
+export interface AlphaZeroSupervisedExportResult {
+  samples: AlphaZeroSupervisedExportSample[];
   stats: TrainingExportStats;
 }
 
@@ -121,6 +137,42 @@ export function exportValueSamplesFromOpeningRecords(
   return { samples, stats };
 }
 
+export function exportAlphaZeroSupervisedSamplesFromOpeningRecords(
+  records: OpeningBookRecord[],
+  options: TrainingExportOptions = {}
+): AlphaZeroSupervisedExportResult {
+  const samples: AlphaZeroSupervisedExportSample[] = [];
+  const stats = createStats(records.length);
+
+  walkOpeningRecordPositions(records, { ...options, includeUnknownResults: false }, stats, ({ state, record, move, ply, choFormation, hanFormation }) => {
+    const value = valueForResult(record.result, state.turn);
+    if (value === null) return;
+    const moveIndex = moveToPolicyIndex(move);
+    const source = record.source ?? record.id;
+    samples.push({
+      position: createTrainingPositionJson(state, {
+        recordId: record.id,
+        source,
+        ply,
+        sideToMove: state.turn,
+        outcomeForSide: resultForSide(record.result, state.turn),
+        choFormation,
+        hanFormation
+      }),
+      policy_target: [{ index: moveIndex, prob: 1.0 }],
+      value_target: value,
+      move: { from: { ...move.from }, to: { ...move.to } },
+      ply,
+      game_id: record.id,
+      to_play: state.turn,
+      final_winner: finalWinnerForResult(record.result)
+    });
+  });
+
+  stats.sampleCount = samples.length;
+  return { samples, stats };
+}
+
 export function policySampleToJsonLine(sample: PolicyTrainingExportSample): string {
   return JSON.stringify(sample);
 }
@@ -135,6 +187,14 @@ export function valueSampleToJsonLine(sample: ValueTrainingExportSample): string
 
 export function valueSamplesToJsonl(samples: ValueTrainingExportSample[]): string {
   return samples.map(valueSampleToJsonLine).join('\n') + (samples.length > 0 ? '\n' : '');
+}
+
+export function alphaZeroSupervisedSampleToJsonLine(sample: AlphaZeroSupervisedExportSample): string {
+  return JSON.stringify(sample);
+}
+
+export function alphaZeroSupervisedSamplesToJsonl(samples: AlphaZeroSupervisedExportSample[]): string {
+  return samples.map(alphaZeroSupervisedSampleToJsonLine).join('\n') + (samples.length > 0 ? '\n' : '');
 }
 
 export function moveToPolicyIndex(move: Move): number {
@@ -261,6 +321,12 @@ function valueForResult(result: OpeningBookRecord['result'], sideToMove: Side): 
   if (outcome === 'win') return 1;
   if (outcome === 'loss') return -1;
   if (outcome === 'draw') return 0;
+  return null;
+}
+
+function finalWinnerForResult(result: OpeningBookRecord['result']): Side | null {
+  if (result === 'cho') return 'CHO';
+  if (result === 'han') return 'HAN';
   return null;
 }
 

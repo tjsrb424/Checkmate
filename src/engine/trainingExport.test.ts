@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   OpeningBookRecord,
+  alphaZeroSupervisedSampleToJsonLine,
+  alphaZeroSupervisedSamplesToJsonl,
+  exportAlphaZeroSupervisedSamplesFromOpeningRecords,
   exportPolicySamplesFromOpeningRecords,
   exportValueSamplesFromOpeningRecords,
   formationToChalimString,
@@ -152,6 +155,47 @@ describe('value training export', () => {
     const jsonl = valueSamplesToJsonl(samples);
 
     expect(JSON.parse(line).value).toBe(1);
+    expect(jsonl.endsWith('\n')).toBe(true);
+    expect(jsonl.trim().split('\n')).toHaveLength(1);
+  });
+});
+
+describe('AlphaZero supervised export', () => {
+  it('exports one-hot policy and value targets for legal opening positions', () => {
+    const result = exportAlphaZeroSupervisedSamplesFromOpeningRecords(fixtureRecords(), { maxPly: 16 });
+
+    expect(result.stats).toMatchObject({
+      recordCount: 3,
+      sourceGameCount: 2,
+      sampleCount: 2,
+      skippedGameCount: 1,
+      illegalMoveCount: 1,
+      parseFailureCount: 1,
+      unknownResultSkipCount: 1
+    });
+
+    expect(result.samples[0]).toMatchObject({
+      policy_target: [{ index: moveToPolicyIndex({ from: { x: 0, y: 6 }, to: { x: 0, y: 5 } }), prob: 1.0 }],
+      value_target: 1,
+      ply: 0,
+      game_id: 'r1',
+      to_play: 'CHO',
+      final_winner: 'CHO'
+    });
+    expect(result.samples[0].position.positionHistory).toHaveLength(1);
+    expect(result.samples[1]).toMatchObject({
+      value_target: -1,
+      to_play: 'HAN',
+      final_winner: 'CHO'
+    });
+  });
+
+  it('serializes AlphaZero supervised JSONL rows', () => {
+    const { samples } = exportAlphaZeroSupervisedSamplesFromOpeningRecords(fixtureRecords(), { maxPly: 1 });
+    const line = alphaZeroSupervisedSampleToJsonLine(samples[0]);
+    const jsonl = alphaZeroSupervisedSamplesToJsonl(samples);
+
+    expect(JSON.parse(line).policy_target[0].prob).toBe(1);
     expect(jsonl.endsWith('\n')).toBe(true);
     expect(jsonl.trim().split('\n')).toHaveLength(1);
   });

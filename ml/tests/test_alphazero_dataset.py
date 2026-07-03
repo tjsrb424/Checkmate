@@ -44,3 +44,18 @@ def test_alphazero_jsonl_dataset_loads_targets(tmp_path):
     assert tuple(policy.shape) == (8100,)
     assert tuple(value.shape) == (1,)
     assert float(value) == 1.0
+
+
+def test_alphazero_dataset_reads_supervised_export_shape(tmp_path):
+    path = tmp_path / "az_supervised.jsonl"
+    row = sample_row()
+    row["policy_target"] = [{"index": 123, "prob": 1.0}]
+    row["position"]["positionHistory"] = ["initial-key"]
+    write_jsonl(path, [row])
+
+    dataset = AlphaZeroJsonlDataset(path)
+    _, policy, value = dataset[0]
+
+    assert np.isclose(float(policy.sum()), 1.0)
+    assert float(policy[123]) == 1.0
+    assert float(value) == 1.0
