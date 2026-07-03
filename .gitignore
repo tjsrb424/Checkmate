@@ -11,7 +11,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-data/raw/
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/janggi-records/
+!data/raw/janggi-records/**
 data/processed/*.csv
 data/processed/*.json
 !data/processed/.gitkeep
@@ -35,6 +38,8 @@ data/arena/*.md
 !data/arena/.gitkeep
 *.zip
 *.gib
+!data/raw/janggi-records/*.zip
+!data/raw/janggi-records/*.gib
 
 __pycache__/
 .pytest_cache/

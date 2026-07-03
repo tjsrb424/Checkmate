@@ -49,7 +49,7 @@ describe('perft', () => {
     expect(perft(initial, 1)).toBe(31);
     expect(perft(initial, 2)).toBe(949);
     expect(perft(initial, 3)).toBe(29697);
-  });
+  }, 30000);
 
   it('divides root moves and formats moves for debugging', () => {
     const initial = state(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');

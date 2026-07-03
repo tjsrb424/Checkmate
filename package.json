@@ -15,6 +15,7 @@
     "arena:league:quick": "tsx scripts/run-arena-league.ts --quick",
     "beta:check": "tsx scripts/check-beta-readiness.ts",
     "beta:check:strict": "tsx scripts/check-beta-readiness.ts --strict",
+    "data:convert-raw-records": "tsx scripts/convert-raw-janggi-records.ts",
     "data:validate-records": "tsx scripts/validate-training-records.ts",
     "data:inspect-records": "tsx scripts/inspect-training-records.ts",
     "training:server": "node scripts/run-training-server.cjs",

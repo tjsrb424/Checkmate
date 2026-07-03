@@ -8,6 +8,43 @@ data/processed/janggi_clean_records.csv
 
 That file is local training data and is ignored by git. Keep source and license notes with the local dataset before running long training jobs.
 
+## Raw Record Conversion
+
+Raw records can be placed under:
+
+```txt
+data/raw/janggi-records/
+```
+
+This repository currently includes the user-provided raw `.gib` and `.zip` bundles there so another checkout can reproduce the conversion. The stored filenames use stable ASCII slugs, and `data/raw/janggi-records/README.md` maps them back to the original Korean filenames.
+
+Default conversion:
+
+```bash
+npm run data:convert-raw-records
+```
+
+Defaults:
+
+- input: `data/raw/janggi-records`
+- output: `data/processed/janggi_clean_records.csv`
+- summary: `data/processed/janggi_clean_records.conversion.json`
+
+Probe only:
+
+```bash
+npm run data:convert-raw-records -- --probeOnly
+```
+
+Fixture smoke:
+
+```bash
+npm run data:convert-raw-records -- --inputDir data/fixtures/raw-records --output data/processed/sample_converted.csv --summary data/processed/sample_conversion.json
+npm run data:validate-records -- --input data/processed/sample_converted.csv
+```
+
+The converter supports compact CSV/TSV, JSON, JSONL, ZIP-contained text records, and CP949/EUC-KR `.gib` text. GIB move text such as `1. 79졸78` is normalized to the compact token shape expected by the existing opening parser.
+
 ## CSV Schema
 
 Minimum header:
