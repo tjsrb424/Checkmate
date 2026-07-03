@@ -13,6 +13,9 @@ pnpm-debug.log*
 
 data/raw/
 data/opening-book/*.json
+data/ml/*.json
+data/ml/*.jsonl
+data/models/
 data/arena/*.json
 data/arena/*.csv
 data/arena/*.md

@@ -33,6 +33,31 @@ From the repository root, you can also run:
 npm run ml:test
 ```
 
+## Supervised Policy Smoke Training
+
+Sprint 18 adds a first PyTorch policy network and JSONL training pipeline.
+
+Export sample opening-record data from TypeScript:
+
+```bash
+npm run ml:export-policy:sample
+```
+
+Train a tiny CPU smoke model:
+
+```bash
+cd ml
+python -m oetongsu_ml.train_policy --data ../data/ml/policy_samples.sample.jsonl --output ../data/models/policy_net.sample.pt --epochs 1 --batchSize 2 --channels 8
+```
+
+Evaluate the checkpoint:
+
+```bash
+python -m oetongsu_ml.evaluate_policy --model ../data/models/policy_net.sample.pt --data ../data/ml/policy_samples.sample.jsonl
+```
+
+The default `PolicyNet` uses 64 convolution channels and is intended as a simple baseline. CPU smoke runs can lower `--channels`; real training should use a larger dataset and preferably GPU acceleration.
+
 ## TypeScript to Python JSON Contract
 
 Positions exported from the TypeScript engine should use this structure:
@@ -95,4 +120,3 @@ fromX * 10 * 9 * 10 + fromY * 9 * 10 + toX * 10 + toY
 `POLICY_SIZE = 8100`.
 
 This is not optimized for Janggi-specific move geometry yet. It is a stable bridge format for early supervised learning and self-play data.
-

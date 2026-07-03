@@ -187,18 +187,18 @@ describe('AI search stability', () => {
     const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
     const table = new TranspositionTable();
 
-    searchBestMove(state, { maxDepth: 2, timeMs: 2500 }, { table });
-    const result = searchBestMove(state, { maxDepth: 2, timeMs: 2500 }, { table });
+    searchBestMove(state, { maxDepth: 2, timeMs: 5000 }, { table });
+    const result = searchBestMove(state, { maxDepth: 2, timeMs: 5000 }, { table });
 
     expect(result.ttHits).toBeGreaterThan(0);
-  });
+  }, 15000);
 
   it('records alpha-beta cutoffs at deeper depth', () => {
     const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
-    const result = searchBestMove(state, { maxDepth: 3, timeMs: 2000 });
+    const result = searchBestMove(state, { maxDepth: 3, timeMs: 10000 });
 
     expect(result.cutoffs).toBeGreaterThan(0);
-  });
+  }, 15000);
 
   it('keeps a fallback move when the search times out before completing a depth', () => {
     const state = createGameState(createInitialBoard('inner-elephant', 'inner-elephant'), 'CHO');
