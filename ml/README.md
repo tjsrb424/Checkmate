@@ -115,6 +115,23 @@ npm run ml:model-arena:quick
 
 Promotion rule: a candidate is marked `promoted` when its arena score rate is at least 55% with zero forfeits and zero illegal moves. Quick mode is only a smoke check; meaningful promotion needs many more games.
 
+## Local AutoTrain Runner
+
+Sprint 24 adds a local orchestration loop that connects self-play, AlphaZero training, candidate-vs-champion arena, and model registry promotion/rejection:
+
+```bash
+npm run ml:autotrain:quick
+```
+
+Direct Python usage for a larger local run:
+
+```bash
+cd ml
+python -m oetongsu_ml.autotrain --iterations 10 --gamesPerIteration 100 --simulations 64 --trainEpochs 2 --promotionGames 40 --threshold 0.55 --allowRandomChampion
+```
+
+AutoTrain writes `data/training/autotrain_state.json`, `autotrain_log.jsonl`, and `autotrain_summary.json`. Quick mode is only a smoke test; real strength gains require much larger self-play counts and should be preceded by `npm run ml:rules:quick`.
+
 ## Rule Parity Hotfix Checks
 
 Python self-play rules must stay aligned with the TypeScript game engine. The Python `TrainingPosition` stores `position_history`, and `generate_legal_moves` bans moves that would create a third occurrence of the same board plus turn.
