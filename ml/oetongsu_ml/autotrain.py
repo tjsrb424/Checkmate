@@ -12,6 +12,7 @@ from .inference import RandomPolicyValueModel, TorchAlphaZeroModel
 from .model_arena import ModelArenaConfig, RandomModelPlayer, TorchModelPlayer, run_model_arena
 from .model_registry import get_latest_promoted, load_registry, promote_candidate, register_candidate, reject_candidate, save_registry
 from .parallel_self_play import ParallelSelfPlayConfig, run_parallel_self_play
+from .performance import SelfPlayPerformanceStats, aggregate_self_play_performance
 from .ruleset import RulesetId
 from .self_play import SelfPlayConfig, play_self_play_game, self_play_samples_to_jsonl
 from .train_alphazero import train_alphazero
@@ -283,11 +284,19 @@ def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str 
             "shards": result.shards,
             "sampleCount": result.sample_count,
             "runId": result.runId,
+            "gamesPerSecond": result.games_per_sec,
+            "samplesPerSecond": result.samples_per_sec,
+            "totalSelfPlayMs": result.total_ms,
+            "totalInferenceMs": result.inference_total_ms,
+            "totalMctsMs": result.mcts_total_ms,
+            "slowestWorker": result.slowest_worker,
+            "fastestWorker": result.fastest_worker,
         }
 
     model = TorchAlphaZeroModel(champion_path) if champion_path else RandomPolicyValueModel(seed=cfg.seed + iteration)
     all_samples = []
     summaries = []
+    performances: list[SelfPlayPerformanceStats] = []
     for game_index in range(cfg.games_per_iteration):
         result = play_self_play_game(
             model,
@@ -303,6 +312,8 @@ def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str 
         )
         all_samples.extend(result.samples)
         summaries.append(result.to_summary())
+        if result.performance is not None:
+            performances.append(result.performance)
 
     selfplay_path.parent.mkdir(parents=True, exist_ok=True)
     selfplay_path.write_text(self_play_samples_to_jsonl(all_samples), encoding="utf-8")
@@ -315,12 +326,20 @@ def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str 
         "summaries": summaries,
     }
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    performance = aggregate_self_play_performance(performances)
     return selfplay_path, summary_path, len(all_samples), {
         "mode": "sequential",
         "workers": 1,
         "shardCount": 0,
         "shards": [],
         "sampleCount": len(all_samples),
+        "gamesPerSecond": performance.games_per_sec,
+        "samplesPerSecond": performance.samples_per_sec,
+        "totalSelfPlayMs": performance.total_ms,
+        "totalInferenceMs": performance.inference_total_ms,
+        "totalMctsMs": performance.mcts_total_ms,
+        "slowestWorker": None,
+        "fastestWorker": None,
     }
 
 
@@ -495,6 +514,11 @@ def main(argv: list[str] | None = None) -> None:
     print(f"completedIterations: {result.completedIterations}")
     print(f"promotions: {result.promotions}")
     print(f"rejections: {result.rejections}")
+    if result.iterations:
+        latest = result.iterations[-1]
+        self_play_metrics = latest.metrics.get("selfPlay", {})
+        print(f"latestSelfPlaySamplesPerSec: {self_play_metrics.get('samplesPerSecond', 0):.3f}")
+        print(f"latestCandidateScoreRate: {latest.candidateScoreRate:.3f}")
     print(f"summary: {result.summaryPath}")
 
 

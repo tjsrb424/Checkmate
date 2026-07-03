@@ -30,6 +30,16 @@ Open the app and select the `훈련` tab. The tab polls the local server, shows 
 
 Sprint 27 adds `Self-play workers` and `Parallel self-play` controls. Use them to generate multiple self-play shards at once before the normal AlphaZero train and arena stages continue.
 
+Sprint 28 adds performance readouts in the AutoTrain summary card:
+
+- `Samples/sec`
+- `Games/sec`
+- `Inference ms`
+- `MCTS ms`
+- worker and shard counts
+
+These are numeric bottleneck indicators. They do not imply playing strength by themselves.
+
 If you need a different API URL for Vite, set:
 
 ```bash

@@ -295,6 +295,10 @@ function SummaryPanel({ summary }: { summary: Record<string, unknown> | null | u
           <Metric label="Workers" value={details.workers} />
           <Metric label="Shards" value={details.shards} />
           <Metric label="Samples" value={details.samples} />
+          <Metric label="Samples/sec" value={details.samplesPerSec} />
+          <Metric label="Games/sec" value={details.gamesPerSec} />
+          <Metric label="Inference ms" value={details.inferenceMs} />
+          <Metric label="MCTS ms" value={details.mctsMs} />
         </dl>
       )}
       <pre className="summaryBox">{summary ? JSON.stringify(summary, null, 2) : '아직 summary 파일이 없습니다.'}</pre>
@@ -355,6 +359,14 @@ function parallelSummaryDetails(summary: Record<string, unknown> | null | undefi
   return {
     workers: String(selfPlay.workers ?? '-'),
     shards: String(selfPlay.shardCount ?? '-'),
-    samples: String(selfPlay.sampleCount ?? '-')
+    samples: String(selfPlay.sampleCount ?? '-'),
+    samplesPerSec: formatNumber(selfPlay.samplesPerSecond),
+    gamesPerSec: formatNumber(selfPlay.gamesPerSecond),
+    inferenceMs: formatNumber(selfPlay.totalInferenceMs),
+    mctsMs: formatNumber(selfPlay.totalMctsMs)
   };
+}
+
+function formatNumber(value: unknown): string {
+  return typeof value === 'number' ? value.toFixed(value >= 100 ? 0 : 2) : '-';
 }

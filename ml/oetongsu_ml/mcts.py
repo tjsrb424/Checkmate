@@ -8,6 +8,7 @@ import numpy as np
 from .constants import POLICY_SIZE
 from .inference import PolicyValueModel
 from .move_index import move_to_index
+from .performance import MCTSPerformanceStats, elapsed_ms, now_ms
 from .python_rules import apply_move, generate_legal_moves, is_in_check
 from .schema import Move, TrainingPosition
 from .ruleset import RulesetId
@@ -22,6 +23,7 @@ class MCTSConfig:
     dirichlet_epsilon: float = 0.0
     max_depth: int = 200
     ruleset_id: RulesetId = "oetongsu-basic"
+    collect_stats: bool = False
 
 
 @dataclass
@@ -55,18 +57,21 @@ class MCTSResult:
     policy_target: np.ndarray
     root_value: float
     children_summary: list[dict]
+    performance: MCTSPerformanceStats | None = None
 
 
 def run_mcts(position: TrainingPosition | dict, model: PolicyValueModel, config: MCTSConfig | None = None) -> MCTSResult:
+    start_ms = now_ms()
     parsed = TrainingPosition.from_raw(position)
     cfg = config or MCTSConfig()
+    counters = new_counters() if cfg.collect_stats else None
     root = MCTSNode(position=parsed, to_play=parsed.turn)
-    legal_moves = generate_legal_moves(parsed, ruleset=cfg.ruleset_id)
+    legal_moves = counted_legal_moves(parsed, cfg.ruleset_id, counters)
     if len(legal_moves) == 0:
         value = terminal_value(parsed)
-        return build_result(root, cfg, value)
+        return build_result(root, cfg, value, build_performance(cfg, counters, elapsed_ms(start_ms)))
 
-    expand(root, model, add_dirichlet_noise=cfg.dirichlet_epsilon > 0, config=cfg)
+    expand(root, model, add_dirichlet_noise=cfg.dirichlet_epsilon > 0, config=cfg, counters=counters)
     root_value = root.q_value
 
     for _ in range(max(0, cfg.simulations)):
@@ -78,17 +83,17 @@ def run_mcts(position: TrainingPosition | dict, model: PolicyValueModel, config:
             search_path.append(node)
             depth += 1
 
-        legal = generate_legal_moves(node.position, ruleset=cfg.ruleset_id)
+        legal = counted_legal_moves(node.position, cfg.ruleset_id, counters)
         if len(legal) == 0:
             value = terminal_value(node.position)
         elif depth >= cfg.max_depth:
-            _, value = model.predict(node.position)
+            _, value = counted_predict(model, node.position, counters)
         else:
-            _, value = expand(node, model, config=cfg)
+            _, value = expand(node, model, config=cfg, counters=counters)
         backup(search_path, value)
         root_value = root.q_value
 
-    return build_result(root, cfg, root_value)
+    return build_result(root, cfg, root_value, build_performance(cfg, counters, elapsed_ms(start_ms)))
 
 
 def select_child(node: MCTSNode, config: MCTSConfig) -> MCTSNode:
@@ -100,9 +105,12 @@ def expand(
     model: PolicyValueModel,
     add_dirichlet_noise: bool = False,
     config: MCTSConfig | None = None,
+    counters: dict[str, float] | None = None,
 ) -> tuple[np.ndarray, float]:
-    legal_moves = generate_legal_moves(node.position, ruleset=(config.ruleset_id if config else None))
-    policy_probs, value = model.predict(node.position)
+    legal_moves = counted_legal_moves(node.position, config.ruleset_id if config else None, counters)
+    policy_probs, value = counted_predict(model, node.position, counters)
+    if counters is not None:
+        counters["expanded_nodes"] += 1
     priors = normalize_legal_priors(policy_probs, legal_moves)
 
     if add_dirichlet_noise and legal_moves and config is not None:
@@ -155,7 +163,12 @@ def terminal_value(position: TrainingPosition) -> float:
     return -1.0 if is_in_check(position, position.turn) else 0.0
 
 
-def build_result(root: MCTSNode, config: MCTSConfig, root_value: float) -> MCTSResult:
+def build_result(
+    root: MCTSNode,
+    config: MCTSConfig,
+    root_value: float,
+    performance: MCTSPerformanceStats | None = None,
+) -> MCTSResult:
     visit_counts = {move_index: child.visit_count for move_index, child in root.children.items()}
     policy_target = np.zeros((POLICY_SIZE,), dtype=np.float32)
     total_visits = sum(visit_counts.values())
@@ -170,6 +183,7 @@ def build_result(root: MCTSNode, config: MCTSConfig, root_value: float) -> MCTSR
         policy_target=policy_target,
         root_value=float(np.clip(root_value, -1.0, 1.0)),
         children_summary=children_summary(root),
+        performance=performance if config.collect_stats else None,
     )
 
 
@@ -194,3 +208,44 @@ def children_summary(root: MCTSNode) -> list[dict]:
         }
         for move_index, child in sorted(root.children.items(), key=lambda item: item[1].visit_count, reverse=True)
     ]
+
+
+def new_counters() -> dict[str, float]:
+    return {
+        "expanded_nodes": 0.0,
+        "inference_calls": 0.0,
+        "inference_ms": 0.0,
+        "legal_move_generations": 0.0,
+    }
+
+
+def counted_legal_moves(position: TrainingPosition, ruleset, counters: dict[str, float] | None) -> list[Move]:
+    if counters is not None:
+        counters["legal_move_generations"] += 1
+    return generate_legal_moves(position, ruleset=ruleset)
+
+
+def counted_predict(
+    model: PolicyValueModel,
+    position: TrainingPosition,
+    counters: dict[str, float] | None,
+) -> tuple[np.ndarray, float]:
+    start_ms = now_ms()
+    policy, value = model.predict(position)
+    if counters is not None:
+        counters["inference_calls"] += 1
+        counters["inference_ms"] += elapsed_ms(start_ms)
+    return policy, value
+
+
+def build_performance(config: MCTSConfig, counters: dict[str, float] | None, total_ms: float) -> MCTSPerformanceStats | None:
+    if not config.collect_stats or counters is None:
+        return None
+    return MCTSPerformanceStats.from_totals(
+        simulations=config.simulations,
+        expanded_nodes=int(counters["expanded_nodes"]),
+        inference_calls=int(counters["inference_calls"]),
+        inference_ms=float(counters["inference_ms"]),
+        legal_move_generations=int(counters["legal_move_generations"]),
+        total_ms=total_ms,
+    )

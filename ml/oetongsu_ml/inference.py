@@ -18,6 +18,14 @@ class PolicyValueModel(ABC):
     def predict(self, position: TrainingPosition | dict) -> tuple[np.ndarray, float]:
         raise NotImplementedError
 
+    def predict_batch(self, positions: list[TrainingPosition | dict]) -> tuple[np.ndarray, np.ndarray]:
+        predictions = [self.predict(position) for position in positions]
+        if not predictions:
+            return np.zeros((0, POLICY_SIZE), dtype=np.float32), np.zeros((0,), dtype=np.float32)
+        policies = np.stack([policy for policy, _ in predictions]).astype(np.float32)
+        values = np.array([value for _, value in predictions], dtype=np.float32)
+        return policies, values
+
 
 class RandomPolicyValueModel(PolicyValueModel):
     def __init__(self, value: float = 0.0, seed: int | None = 1) -> None:
@@ -33,6 +41,16 @@ class RandomPolicyValueModel(PolicyValueModel):
         else:
             policy /= total
         return policy, self.value
+
+    def predict_batch(self, positions: list[TrainingPosition | dict]) -> tuple[np.ndarray, np.ndarray]:
+        parsed_count = len([TrainingPosition.from_raw(position) for position in positions])
+        if parsed_count == 0:
+            return np.zeros((0, POLICY_SIZE), dtype=np.float32), np.zeros((0,), dtype=np.float32)
+        policies = self.rng.random((parsed_count, POLICY_SIZE), dtype=np.float32)
+        totals = policies.sum(axis=1, keepdims=True)
+        policies = np.divide(policies, totals, out=np.full_like(policies, 1.0 / POLICY_SIZE), where=totals > 0)
+        values = np.full((parsed_count,), self.value, dtype=np.float32)
+        return policies.astype(np.float32), values
 
 
 class TorchPolicyValueModel(PolicyValueModel):
@@ -61,6 +79,18 @@ class TorchPolicyValueModel(PolicyValueModel):
             value = float(self.value_model(features).squeeze().cpu())
         return policy, float(np.clip(value, -1.0, 1.0))
 
+    def predict_batch(self, positions: list[TrainingPosition | dict]) -> tuple[np.ndarray, np.ndarray]:
+        if not positions:
+            return np.zeros((0, POLICY_SIZE), dtype=np.float32), np.zeros((0,), dtype=np.float32)
+        parsed = [TrainingPosition.from_raw(position) for position in positions]
+        features = torch.from_numpy(np.stack([encode_position(position) for position in parsed])).to(self.device)
+        with torch.no_grad():
+            logits = self.policy_model(features)
+            values = self.value_model(features).view(-1)
+            policies = torch.softmax(logits, dim=1).cpu().numpy().astype(np.float32)
+            value_array = values.cpu().numpy().astype(np.float32)
+        return policies, np.clip(value_array, -1.0, 1.0).astype(np.float32)
+
 
 class TorchAlphaZeroModel(PolicyValueModel):
     def __init__(self, checkpoint: str | Path, device: str | torch.device | None = None) -> None:
@@ -78,3 +108,14 @@ class TorchAlphaZeroModel(PolicyValueModel):
             policy = torch.softmax(policy_logits, dim=1).squeeze(0).cpu().numpy().astype(np.float32)
             value_float = float(value.squeeze().cpu())
         return policy, float(np.clip(value_float, -1.0, 1.0))
+
+    def predict_batch(self, positions: list[TrainingPosition | dict]) -> tuple[np.ndarray, np.ndarray]:
+        if not positions:
+            return np.zeros((0, POLICY_SIZE), dtype=np.float32), np.zeros((0,), dtype=np.float32)
+        parsed = [TrainingPosition.from_raw(position) for position in positions]
+        features = torch.from_numpy(np.stack([encode_position(position) for position in parsed])).to(self.device)
+        with torch.no_grad():
+            policy_logits, values = self.model(features)
+            policies = torch.softmax(policy_logits, dim=1).cpu().numpy().astype(np.float32)
+            value_array = values.view(-1).cpu().numpy().astype(np.float32)
+        return policies, np.clip(value_array, -1.0, 1.0).astype(np.float32)

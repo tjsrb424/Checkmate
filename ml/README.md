@@ -99,6 +99,8 @@ cd ml
 python -m oetongsu_ml.parallel_self_play --games 1000 --workers 4 --simulations 64 --model ../data/models/checkpoints/supervised_v0001.pt --output ../data/selfplay/parallel_1000.jsonl
 ```
 
+Sprint 28 adds performance metrics to self-play summaries. Parallel summaries now include worker-level and aggregate `games_per_sec`, `samples_per_sec`, `total_ms`, `mcts_total_ms`, and `inference_total_ms`. These numbers are meant to locate bottlenecks before deeper MCTS batching work.
+
 Direct Python usage is also available:
 
 ```bash
@@ -150,7 +152,11 @@ cd ml
 python -m oetongsu_ml.autotrain --iterations 10 --gamesPerIteration 1000 --selfplayWorkers 4 --parallelSelfPlay --simulations 64 --trainEpochs 2 --promotionGames 100
 ```
 
-AutoTrain writes `data/training/autotrain_state.json`, `autotrain_log.jsonl`, and `autotrain_summary.json`. Quick mode is only a smoke test; real strength gains require much larger self-play counts and should be preceded by `npm run ml:rules:quick`.
+AutoTrain writes `data/training/autotrain_state.json`, `autotrain_log.jsonl`, and `autotrain_summary.json`. Each iteration includes `metrics.selfPlay` with `samplesPerSecond`, `gamesPerSecond`, `totalSelfPlayMs`, `totalMctsMs`, and `totalInferenceMs`. Quick mode is only a smoke test; real strength gains require much larger self-play counts and should be preceded by `npm run ml:rules:quick`.
+
+## Batch Inference API
+
+Sprint 28 adds `PolicyValueModel.predict_batch(positions)`. The default implementation loops through `predict`, while `TorchAlphaZeroModel.predict_batch` builds one tensor batch and performs a single forward pass. Current MCTS still expands one node at a time, but the batch API and timing stats prepare the next optimization pass.
 
 ## Initial Champion Bootstrap
 

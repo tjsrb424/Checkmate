@@ -10,6 +10,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from .inference import RandomPolicyValueModel, TorchAlphaZeroModel
+from .performance import SelfPlayPerformanceStats, aggregate_self_play_performance, elapsed_ms, now_ms, rate_per_sec
 from .ruleset import RulesetId
 from .self_play import SelfPlayConfig, play_self_play_game, self_play_samples_to_jsonl
 
@@ -45,6 +46,7 @@ class WorkerSelfPlayResult:
     endedAt: str
     status: WorkerStatus
     game_summaries: list[dict[str, Any]] = field(default_factory=list)
+    performance: SelfPlayPerformanceStats | None = None
     error: str | None = None
 
 
@@ -62,6 +64,13 @@ class ParallelSelfPlayResult:
     startedAt: str
     endedAt: str
     status: RunStatus
+    total_ms: float = 0.0
+    games_per_sec: float = 0.0
+    samples_per_sec: float = 0.0
+    mcts_total_ms: float = 0.0
+    inference_total_ms: float = 0.0
+    slowest_worker: dict[str, Any] | None = None
+    fastest_worker: dict[str, Any] | None = None
     errors: list[str] = field(default_factory=list)
     partial: bool = False
 
@@ -79,6 +88,7 @@ def split_games(total_games: int, workers: int) -> list[int]:
 
 def run_parallel_self_play(config: ParallelSelfPlayConfig | None = None) -> ParallelSelfPlayResult:
     cfg = config or ParallelSelfPlayConfig()
+    run_start_ms = now_ms()
     game_counts = split_games(cfg.games, cfg.workers)
     run_id = uuid4().hex[:12]
     started_at = utc_now()
@@ -109,6 +119,8 @@ def run_parallel_self_play(config: ParallelSelfPlayConfig | None = None) -> Para
     results.sort(key=lambda item: item.worker_id)
     errors.extend(result.error for result in results if result.error)
     failed = bool(errors) or any(result.status == "failed" for result in results)
+    total_ms = elapsed_ms(run_start_ms)
+    performance_summary = summarize_worker_performance(results, total_ms)
 
     if failed:
         run_result = ParallelSelfPlayResult(
@@ -124,6 +136,7 @@ def run_parallel_self_play(config: ParallelSelfPlayConfig | None = None) -> Para
             startedAt=started_at,
             endedAt=utc_now(),
             status="failed",
+            **performance_summary,
             errors=errors,
             partial=True,
         )
@@ -144,6 +157,7 @@ def run_parallel_self_play(config: ParallelSelfPlayConfig | None = None) -> Para
         startedAt=started_at,
         endedAt=utc_now(),
         status="completed",
+        **performance_summary,
         errors=[],
         partial=False,
     )
@@ -152,6 +166,7 @@ def run_parallel_self_play(config: ParallelSelfPlayConfig | None = None) -> Para
 
 
 def _run_worker(worker_id: int, games: int, run_id: str, cfg: ParallelSelfPlayConfig) -> WorkerSelfPlayResult:
+    worker_start_ms = now_ms()
     started_at = utc_now()
     shard_dir = Path(cfg.shard_dir)
     shard_dir.mkdir(parents=True, exist_ok=True)
@@ -160,6 +175,7 @@ def _run_worker(worker_id: int, games: int, run_id: str, cfg: ParallelSelfPlayCo
     worker_seed = cfg.seed + worker_id * 100000
     all_samples = []
     summaries: list[dict[str, Any]] = []
+    game_performances: list[SelfPlayPerformanceStats] = []
     try:
         model = create_worker_model(cfg, worker_seed)
         for game_index in range(games):
@@ -178,8 +194,11 @@ def _run_worker(worker_id: int, games: int, run_id: str, cfg: ParallelSelfPlayCo
             )
             all_samples.extend(result.samples)
             summaries.append(result.to_summary())
+            if result.performance is not None:
+                game_performances.append(result.performance)
 
         shard_path.write_text(self_play_samples_to_jsonl(all_samples), encoding="utf-8")
+        performance = aggregate_worker_performance(games, len(all_samples), game_performances, elapsed_ms(worker_start_ms))
         worker_result = WorkerSelfPlayResult(
             worker_id=worker_id,
             games=games,
@@ -190,8 +209,10 @@ def _run_worker(worker_id: int, games: int, run_id: str, cfg: ParallelSelfPlayCo
             endedAt=utc_now(),
             status="completed",
             game_summaries=summaries,
+            performance=performance,
         )
     except BaseException as error:
+        performance = aggregate_worker_performance(len(summaries), len(all_samples), game_performances, elapsed_ms(worker_start_ms))
         worker_result = WorkerSelfPlayResult(
             worker_id=worker_id,
             games=games,
@@ -202,6 +223,7 @@ def _run_worker(worker_id: int, games: int, run_id: str, cfg: ParallelSelfPlayCo
             endedAt=utc_now(),
             status="failed",
             game_summaries=summaries,
+            performance=performance,
             error=str(error),
         )
     summary_path.write_text(json.dumps(asdict(worker_result), indent=2), encoding="utf-8")
@@ -225,6 +247,52 @@ def merge_shards(shards: list[Path], output: Path) -> None:
 
 def write_parallel_summary(path: str | Path, result: ParallelSelfPlayResult) -> None:
     Path(path).write_text(json.dumps(asdict(result), indent=2), encoding="utf-8")
+
+
+def aggregate_worker_performance(
+    games: int,
+    sample_count: int,
+    game_performances: list[SelfPlayPerformanceStats],
+    total_ms: float,
+) -> SelfPlayPerformanceStats:
+    aggregate = aggregate_self_play_performance(game_performances)
+    return SelfPlayPerformanceStats.from_totals(
+        games=games,
+        plies=aggregate.plies,
+        samples=sample_count,
+        total_ms=total_ms,
+        mcts_total_ms=aggregate.mcts_total_ms,
+        inference_total_ms=aggregate.inference_total_ms,
+    )
+
+
+def summarize_worker_performance(results: list[WorkerSelfPlayResult], total_ms: float) -> dict[str, Any]:
+    performances = [result.performance for result in results if result.performance is not None]
+    aggregate = aggregate_self_play_performance(performances)
+    completed = [result for result in results if result.performance is not None]
+    slowest = max(completed, key=lambda item: item.performance.total_ms if item.performance else 0.0, default=None)
+    fastest = min(completed, key=lambda item: item.performance.total_ms if item.performance else 0.0, default=None)
+    return {
+        "total_ms": total_ms,
+        "games_per_sec": rate_per_sec(sum(result.games for result in results), total_ms),
+        "samples_per_sec": rate_per_sec(sum(result.sample_count for result in results), total_ms),
+        "mcts_total_ms": aggregate.mcts_total_ms,
+        "inference_total_ms": aggregate.inference_total_ms,
+        "slowest_worker": worker_brief(slowest),
+        "fastest_worker": worker_brief(fastest),
+    }
+
+
+def worker_brief(result: WorkerSelfPlayResult | None) -> dict[str, Any] | None:
+    if result is None or result.performance is None:
+        return None
+    return {
+        "worker_id": result.worker_id,
+        "games": result.games,
+        "sample_count": result.sample_count,
+        "total_ms": result.performance.total_ms,
+        "samples_per_sec": result.performance.samples_per_sec,
+    }
 
 
 def utc_now() -> str:
@@ -274,6 +342,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"games: {result.games}")
     print(f"workers: {result.workers}")
     print(f"samples: {result.sample_count}")
+    print(f"games/sec: {result.games_per_sec:.3f}")
+    print(f"samples/sec: {result.samples_per_sec:.3f}")
+    print(f"duration_ms: {result.total_ms:.1f}")
     print(f"output: {result.output}")
     print(f"summary: {result.summary}")
 

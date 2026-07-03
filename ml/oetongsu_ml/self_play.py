@@ -10,6 +10,7 @@ from .constants import POLICY_SIZE
 from .inference import PolicyValueModel
 from .mcts import MCTSConfig, MCTSResult, run_mcts
 from .move_index import index_to_move, is_valid_policy_index, move_to_index
+from .performance import SelfPlayPerformanceStats, elapsed_ms, now_ms
 from .python_rules import apply_move, create_initial_position, generate_legal_moves, is_in_check, other_side
 from .ruleset import RulesetId, resolve_ruleset
 from .scoring import score_board_material
@@ -30,6 +31,7 @@ class SelfPlayConfig:
     cpuct: float = 1.5
     max_depth: int = 200
     ruleset_id: RulesetId = "kakao-like"
+    collect_performance: bool = True
 
 
 @dataclass
@@ -74,9 +76,10 @@ class SelfPlayGameResult:
     plies: int
     history: list[Move] = field(default_factory=list)
     samples: list[SelfPlaySampleRecord] = field(default_factory=list)
+    performance: SelfPlayPerformanceStats | None = None
 
     def to_summary(self) -> dict[str, Any]:
-        return {
+        summary = {
             "game_id": self.game_id,
             "winner": self.winner,
             "outcome": self.outcome,
@@ -84,9 +87,18 @@ class SelfPlayGameResult:
             "sample_count": len(self.samples),
             "history": [move.to_json() for move in self.history],
         }
+        if self.performance is not None:
+            summary["performance"] = self.performance.to_json()
+            summary["total_ms"] = self.performance.total_ms
+            summary["mcts_total_ms"] = self.performance.mcts_total_ms
+            summary["inference_total_ms"] = self.performance.inference_total_ms
+            summary["avg_mcts_ms"] = self.performance.mcts_total_ms / self.plies if self.plies > 0 else 0.0
+            summary["samples_per_sec"] = self.performance.samples_per_sec
+        return summary
 
 
 def play_self_play_game(model: PolicyValueModel, config: SelfPlayConfig | None = None) -> SelfPlayGameResult:
+    start_ms = now_ms()
     cfg = config or SelfPlayConfig()
     ruleset = resolve_ruleset(cfg.ruleset_id)
     rng = np.random.default_rng(cfg.seed)
@@ -95,6 +107,8 @@ def play_self_play_game(model: PolicyValueModel, config: SelfPlayConfig | None =
     history: list[Move] = []
     winner: Side | None = None
     outcome: Outcome = "draw_max_plies"
+    mcts_total_ms = 0.0
+    inference_total_ms = 0.0
 
     for ply in range(cfg.max_plies):
         legal_moves = generate_legal_moves(position, ruleset=ruleset)
@@ -113,8 +127,12 @@ def play_self_play_game(model: PolicyValueModel, config: SelfPlayConfig | None =
             temperature=temperature,
             max_depth=cfg.max_depth,
             ruleset_id=ruleset.id,
+            collect_stats=cfg.collect_performance,
         )
         mcts_result = run_mcts(position, model, mcts_config)
+        if mcts_result.performance is not None:
+            mcts_total_ms += mcts_result.performance.total_ms
+            inference_total_ms += mcts_result.performance.inference_ms
         move = select_move(mcts_result, temperature, rng)
         if move is None:
             outcome = "draw_no_legal_moves"
@@ -145,6 +163,19 @@ def play_self_play_game(model: PolicyValueModel, config: SelfPlayConfig | None =
             outcome = "draw_max_plies"
 
     samples = finalize_samples(pending_samples, winner)
+    total_ms = elapsed_ms(start_ms)
+    performance = (
+        SelfPlayPerformanceStats.from_totals(
+            games=1,
+            plies=len(history),
+            samples=len(samples),
+            total_ms=total_ms,
+            mcts_total_ms=mcts_total_ms,
+            inference_total_ms=inference_total_ms,
+        )
+        if cfg.collect_performance
+        else None
+    )
     return SelfPlayGameResult(
         game_id=cfg.game_id,
         winner=winner,
@@ -152,6 +183,7 @@ def play_self_play_game(model: PolicyValueModel, config: SelfPlayConfig | None =
         plies=len(history),
         history=history if cfg.record_history else [],
         samples=samples,
+        performance=performance,
     )
 
 

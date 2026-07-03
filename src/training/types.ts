@@ -93,7 +93,36 @@ export interface TrainingLogsResponse extends TrainingApiEnvelope {
 }
 
 export interface TrainingSummaryResponse extends TrainingApiEnvelope {
-  summary?: Record<string, unknown> | null;
+  summary?: AutoTrainSummary | null;
+}
+
+export interface AutoTrainSummary {
+  runId?: string;
+  iterations?: Array<{
+    iteration?: number;
+    sampleCount?: number;
+    metrics?: {
+      selfPlay?: SelfPlayPerformanceMetrics;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+export interface SelfPlayPerformanceMetrics {
+  mode?: string;
+  workers?: number;
+  shardCount?: number;
+  sampleCount?: number;
+  gamesPerSecond?: number;
+  samplesPerSecond?: number;
+  totalSelfPlayMs?: number;
+  totalInferenceMs?: number;
+  totalMctsMs?: number;
+  slowestWorker?: Record<string, unknown> | null;
+  fastestWorker?: Record<string, unknown> | null;
+  [key: string]: unknown;
 }
 
 export interface ArenaResultSummary {

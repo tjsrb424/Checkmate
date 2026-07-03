@@ -59,3 +59,7 @@ def test_parallel_self_play_random_model_writes_shards_and_merge(tmp_path):
     assert payload["sample_count"] == result.sample_count
     assert payload["workers"] == 2
     assert payload["partial"] is False
+    assert payload["total_ms"] >= 0
+    assert payload["samples_per_sec"] >= 0
+    assert payload["games_per_sec"] >= 0
+    assert payload["worker_summaries"][0]["performance"]["samples_per_sec"] >= 0
