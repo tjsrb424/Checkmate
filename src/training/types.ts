@@ -38,6 +38,8 @@ export interface StartAutoTrainRequest {
   promotionGames?: number;
   threshold?: number;
   ruleset?: 'kakao-like' | 'oetongsu-basic' | 'kja-like';
+  selfplayWorkers?: number;
+  parallelSelfPlay?: boolean;
 }
 
 export interface StartAutoTrainResponse extends TrainingApiEnvelope {

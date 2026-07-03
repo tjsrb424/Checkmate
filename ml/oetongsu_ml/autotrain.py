@@ -11,6 +11,7 @@ from uuid import uuid4
 from .inference import RandomPolicyValueModel, TorchAlphaZeroModel
 from .model_arena import ModelArenaConfig, RandomModelPlayer, TorchModelPlayer, run_model_arena
 from .model_registry import get_latest_promoted, load_registry, promote_candidate, register_candidate, reject_candidate, save_registry
+from .parallel_self_play import ParallelSelfPlayConfig, run_parallel_self_play
 from .ruleset import RulesetId
 from .self_play import SelfPlayConfig, play_self_play_game, self_play_samples_to_jsonl
 from .train_alphazero import train_alphazero
@@ -38,6 +39,7 @@ class AutoTrainConfig:
     registry_path: str = "../data/models/registry.json"
     training_dir: str = "../data/training"
     selfplay_dir: str = "../data/selfplay"
+    shard_dir: str = "../data/selfplay/shards"
     model_dir: str = "../data/models"
     arena_dir: str = "../data/models/arena"
     initial_champion: str | None = None
@@ -46,6 +48,8 @@ class AutoTrainConfig:
     resume_champion: bool = True
     quick: bool = False
     strict: bool = False
+    selfplay_workers: int = 1
+    parallel_selfplay: bool = False
 
     def resolved(self) -> "AutoTrainConfig":
         if not self.quick:
@@ -69,6 +73,7 @@ class AutoTrainConfig:
             registry_path=self.registry_path,
             training_dir=self.training_dir,
             selfplay_dir=self.selfplay_dir,
+            shard_dir=self.shard_dir,
             model_dir=self.model_dir,
             arena_dir=self.arena_dir,
             initial_champion=self.initial_champion,
@@ -77,6 +82,8 @@ class AutoTrainConfig:
             resume_champion=self.resume_champion,
             quick=True,
             strict=self.strict,
+            selfplay_workers=self.selfplay_workers,
+            parallel_selfplay=self.parallel_selfplay,
         )
 
 
@@ -189,7 +196,7 @@ def run_autotrain_iteration(cfg: AutoTrainConfig, registry: dict[str, Any], iter
     if champion_path is None and not cfg.allow_random_champion:
         raise RuntimeError("no promoted champion found; pass --allowRandomChampion, --quick, or --initialChampion")
 
-    selfplay_path, selfplay_summary_path, sample_count = generate_self_play(cfg, iteration, champion_path)
+    selfplay_path, selfplay_summary_path, sample_count, selfplay_metrics = generate_self_play(cfg, iteration, champion_path)
     checkpoint_path = Path(cfg.model_dir) / "checkpoints" / f"{candidate_version}.pt"
     resume_path = champion_path if cfg.resume_champion and champion_path else None
     train_metrics = train_alphazero(
@@ -210,7 +217,7 @@ def run_autotrain_iteration(cfg: AutoTrainConfig, registry: dict[str, Any], iter
         path=str(checkpoint_path),
         metadata_path=str(metadata_path),
         parent_version=champion_version,
-        metrics={"train": latest_train_metrics(train_metrics), "sampleCount": sample_count},
+        metrics={"train": latest_train_metrics(train_metrics), "sampleCount": sample_count, "selfPlay": selfplay_metrics},
     )
 
     arena_result_path = Path(cfg.arena_dir) / f"{candidate_version}_arena.json"
@@ -244,11 +251,40 @@ def run_autotrain_iteration(cfg: AutoTrainConfig, registry: dict[str, Any], iter
         championScoreRate=arena_result.championScoreRate,
         promoted=arena_result.promoted,
         status=status,
-        metrics={"train": train_metrics, "arena": arena_json},
+        metrics={"selfPlay": selfplay_metrics, "train": train_metrics, "arena": arena_json},
     )
 
 
-def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str | None) -> tuple[Path, Path, int]:
+def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str | None) -> tuple[Path, Path, int, dict[str, Any]]:
+    selfplay_path = Path(cfg.selfplay_dir) / f"az_iter_{iteration:06d}.jsonl"
+    summary_path = Path(cfg.selfplay_dir) / f"az_iter_{iteration:06d}_summary.json"
+    if cfg.parallel_selfplay or cfg.selfplay_workers > 1:
+        result = run_parallel_self_play(
+            ParallelSelfPlayConfig(
+                games=cfg.games_per_iteration,
+                workers=max(1, cfg.selfplay_workers),
+                simulations=cfg.simulations,
+                max_plies=cfg.max_plies,
+                temperature=cfg.temperature,
+                temperature_drop_ply=cfg.temperature_drop_ply,
+                seed=cfg.seed + iteration * 1000,
+                ruleset_id=cfg.ruleset_id,
+                output=str(selfplay_path),
+                summary=str(summary_path),
+                shard_dir=cfg.shard_dir,
+                model_checkpoint=champion_path,
+                random_model=champion_path is None,
+            )
+        )
+        return selfplay_path, summary_path, result.sample_count, {
+            "mode": "parallel",
+            "workers": result.workers,
+            "shardCount": len(result.shards),
+            "shards": result.shards,
+            "sampleCount": result.sample_count,
+            "runId": result.runId,
+        }
+
     model = TorchAlphaZeroModel(champion_path) if champion_path else RandomPolicyValueModel(seed=cfg.seed + iteration)
     all_samples = []
     summaries = []
@@ -268,15 +304,24 @@ def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str 
         all_samples.extend(result.samples)
         summaries.append(result.to_summary())
 
-    selfplay_path = Path(cfg.selfplay_dir) / f"az_iter_{iteration:06d}.jsonl"
-    summary_path = Path(cfg.selfplay_dir) / f"az_iter_{iteration:06d}_summary.json"
     selfplay_path.parent.mkdir(parents=True, exist_ok=True)
     selfplay_path.write_text(self_play_samples_to_jsonl(all_samples), encoding="utf-8")
-    summary_path.write_text(
-        json.dumps({"games": cfg.games_per_iteration, "sample_count": len(all_samples), "summaries": summaries}, indent=2),
-        encoding="utf-8",
-    )
-    return selfplay_path, summary_path, len(all_samples)
+    summary = {
+        "games": cfg.games_per_iteration,
+        "workers": 1,
+        "sample_count": len(all_samples),
+        "shard_count": 0,
+        "shards": [],
+        "summaries": summaries,
+    }
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return selfplay_path, summary_path, len(all_samples), {
+        "mode": "sequential",
+        "workers": 1,
+        "shardCount": 0,
+        "shards": [],
+        "sampleCount": len(all_samples),
+    }
 
 
 def run_candidate_arena(cfg: AutoTrainConfig, candidate_version: str, checkpoint_path: Path, champion_path: str | None):
@@ -362,6 +407,7 @@ def ensure_directories(config: AutoTrainConfig) -> None:
     for path in (
         config.training_dir,
         config.selfplay_dir,
+        config.shard_dir,
         config.model_dir,
         Path(config.model_dir) / "checkpoints",
         config.arena_dir,
@@ -394,6 +440,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--registry", default="../data/models/registry.json")
     parser.add_argument("--trainingDir", default="../data/training")
     parser.add_argument("--selfplayDir", default="../data/selfplay")
+    parser.add_argument("--shardDir", default="../data/selfplay/shards")
     parser.add_argument("--modelDir", default="../data/models")
     parser.add_argument("--arenaDir", default="../data/models/arena")
     parser.add_argument("--initialChampion", default=None)
@@ -402,6 +449,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--resumeChampion", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--quick", action="store_true")
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--selfplayWorkers", type=int, default=1)
+    parser.add_argument("--parallelSelfPlay", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -425,6 +474,7 @@ def config_from_args(args: argparse.Namespace) -> AutoTrainConfig:
         registry_path=args.registry,
         training_dir=args.trainingDir,
         selfplay_dir=args.selfplayDir,
+        shard_dir=args.shardDir,
         model_dir=args.modelDir,
         arena_dir=args.arenaDir,
         initial_champion=args.initialChampion,
@@ -433,6 +483,8 @@ def config_from_args(args: argparse.Namespace) -> AutoTrainConfig:
         resume_champion=args.resumeChampion,
         quick=args.quick,
         strict=args.strict,
+        selfplay_workers=args.selfplayWorkers,
+        parallel_selfplay=args.parallelSelfPlay,
     )
 
 

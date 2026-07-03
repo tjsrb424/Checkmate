@@ -86,6 +86,19 @@ Sprint 21 adds a first JSONL self-play generator:
 npm run ml:selfplay:quick
 ```
 
+Sprint 27 adds parallel self-play workers that write per-worker shards and merge them into one JSONL file:
+
+```bash
+npm run ml:selfplay:parallel:quick
+```
+
+Larger direct run:
+
+```bash
+cd ml
+python -m oetongsu_ml.parallel_self_play --games 1000 --workers 4 --simulations 64 --model ../data/models/checkpoints/supervised_v0001.pt --output ../data/selfplay/parallel_1000.jsonl
+```
+
 Direct Python usage is also available:
 
 ```bash
@@ -128,6 +141,13 @@ Direct Python usage for a larger local run:
 ```bash
 cd ml
 python -m oetongsu_ml.autotrain --iterations 10 --gamesPerIteration 100 --simulations 64 --trainEpochs 2 --promotionGames 40 --threshold 0.55 --allowRandomChampion
+```
+
+Parallel self-play inside AutoTrain:
+
+```bash
+cd ml
+python -m oetongsu_ml.autotrain --iterations 10 --gamesPerIteration 1000 --selfplayWorkers 4 --parallelSelfPlay --simulations 64 --trainEpochs 2 --promotionGames 100
 ```
 
 AutoTrain writes `data/training/autotrain_state.json`, `autotrain_log.jsonl`, and `autotrain_summary.json`. Quick mode is only a smoke test; real strength gains require much larger self-play counts and should be preceded by `npm run ml:rules:quick`.

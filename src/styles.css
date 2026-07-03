@@ -651,6 +651,10 @@ select {
   margin: 0;
 }
 
+.metricGrid.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .metricGrid div {
   min-width: 0;
   padding: 10px;
@@ -734,6 +738,24 @@ select {
   border-radius: 6px;
   color: #182232;
   background: rgba(255, 255, 255, 0.72);
+}
+
+.trainingForm .trainingToggle {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  justify-content: start;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.trainingForm .trainingToggle input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
 }
 
 .modelList,

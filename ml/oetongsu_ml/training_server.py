@@ -34,6 +34,8 @@ class StartAutoTrainRequest(BaseModel):
     promotionGames: int | None = None
     threshold: float | None = None
     ruleset: Literal["kakao-like", "oetongsu-basic", "kja-like"] | None = None
+    selfplayWorkers: int | None = None
+    parallelSelfPlay: bool = False
 
 
 class TrainingServerController:
@@ -168,10 +170,13 @@ class TrainingServerController:
             ("--promotionGames", request.promotionGames),
             ("--threshold", request.threshold),
             ("--ruleset", request.ruleset),
+            ("--selfplayWorkers", selfplay_workers_for(request)),
         ]
         for option, value in option_map:
             if value is not None:
                 command.extend([option, str(value)])
+        if request.parallelSelfPlay:
+            command.append("--parallelSelfPlay")
         return command
 
     def server_status(self) -> str:
@@ -249,6 +254,14 @@ def read_json_or_none(path: Path) -> Any | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return None
+
+
+def selfplay_workers_for(request: StartAutoTrainRequest) -> int | None:
+    if request.selfplayWorkers is not None:
+        return max(1, request.selfplayWorkers)
+    if request.quick and request.parallelSelfPlay:
+        return 2
+    return None
 
 
 def utc_now() -> str:

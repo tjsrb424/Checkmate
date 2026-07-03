@@ -28,6 +28,8 @@ npm run dev
 
 Open the app and select the `훈련` tab. The tab polls the local server, shows offline guidance when the server is not running, and exposes quick/custom AutoTrain controls.
 
+Sprint 27 adds `Self-play workers` and `Parallel self-play` controls. Use them to generate multiple self-play shards at once before the normal AlphaZero train and arena stages continue.
+
 If you need a different API URL for Vite, set:
 
 ```bash
@@ -64,6 +66,14 @@ These files are local training artifacts and are not intended to be committed.
 If the Training tab says the server is offline, run `npm run training:server` from the repository root and press refresh.
 
 If AutoTrain exits immediately, inspect `data/training/server_last_stderr.log` first. It captures the subprocess stderr from `python -m oetongsu_ml.autotrain`.
+
+Worker count guidance:
+
+- Entry laptop: 1 to 2 workers
+- Typical desktop: 2 to 4 workers
+- High-core CPU: 4 to 8 workers
+
+Too many workers can slow the run down because every worker loads its own model and competes for CPU and memory.
 
 If dependencies are missing, activate the ML virtual environment and run:
 

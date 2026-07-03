@@ -25,6 +25,7 @@
     "ml:export-az-supervised": "tsx scripts/export-az-supervised-data.ts",
     "ml:export-az-supervised:sample": "tsx scripts/export-az-supervised-data.ts --input data/fixtures/opening-records.sample.csv --output data/ml/az_supervised_samples.sample.jsonl --summary data/ml/az_supervised_summary.sample.json",
     "ml:selfplay:quick": "node scripts/run-self-play.cjs --games 1 --maxPlies 4 --simulations 4 --randomModel",
+    "ml:selfplay:parallel:quick": "node scripts/run-parallel-self-play.cjs --games 2 --workers 2 --simulations 2 --maxPlies 4 --randomModel",
     "ml:az:quick": "node scripts/run-az-training.cjs --games 1 --maxPlies 4 --simulations 4 --epochs 1 --batchSize 2 --channels 8",
     "ml:model-arena:quick": "node scripts/promote-model.cjs --randomModel --games 2 --maxPlies 4 --simulations 2 --version random_candidate_quick",
     "ml:autotrain:quick": "node scripts/run-autotrain.cjs --quick",

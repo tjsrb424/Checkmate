@@ -21,6 +21,7 @@ data/models/arena/
 data/models/registry.json
 data/selfplay/*.json
 data/selfplay/*.jsonl
+data/selfplay/shards/
 data/training/*
 !data/training/.gitkeep
 data/arena/*.json

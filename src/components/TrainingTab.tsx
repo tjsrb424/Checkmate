@@ -46,7 +46,9 @@ export function TrainingTab() {
     batchSize: 8,
     promotionGames: 4,
     threshold: 0.55,
-    ruleset: 'kakao-like'
+    ruleset: 'kakao-like',
+    selfplayWorkers: 2,
+    parallelSelfPlay: true
   });
 
   const offline = Boolean(health?.offline || status?.offline);
@@ -77,7 +79,14 @@ export function TrainingTab() {
   }, [refresh, running]);
 
   async function handleQuickStart() {
-    await runAction('빠른 AutoTrain을 시작했습니다.', () => startAutoTrain({ quick: true, ruleset: form.ruleset }));
+    await runAction('빠른 AutoTrain을 시작했습니다.', () =>
+      startAutoTrain({
+        quick: true,
+        ruleset: form.ruleset,
+        selfplayWorkers: form.selfplayWorkers,
+        parallelSelfPlay: form.parallelSelfPlay
+      })
+    );
   }
 
   async function handleCustomStart() {
@@ -173,6 +182,12 @@ export function TrainingTab() {
               min={1}
               onChange={(value) => updateForm('promotionGames', value)}
             />
+            <NumberField
+              label="Workers"
+              value={form.selfplayWorkers}
+              min={1}
+              onChange={(value) => updateForm('selfplayWorkers', value)}
+            />
             <NumberField label="Threshold" value={form.threshold} min={0} step={0.01} onChange={(value) => updateForm('threshold', value)} />
             <label>
               <span>Ruleset</span>
@@ -183,6 +198,14 @@ export function TrainingTab() {
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="trainingToggle">
+              <input
+                type="checkbox"
+                checked={form.parallelSelfPlay}
+                onChange={(event) => updateForm('parallelSelfPlay', event.target.checked)}
+              />
+              <span>Parallel self-play</span>
             </label>
           </div>
         </section>
@@ -261,11 +284,19 @@ function RegistryPanel({ registry, models }: { registry: ModelRegistryResponse |
 }
 
 function SummaryPanel({ summary }: { summary: Record<string, unknown> | null | undefined }) {
+  const details = parallelSummaryDetails(summary);
   return (
     <section className="trainingPanel">
       <div className="panelHeader">
         <span className="groupLabel">AutoTrain 요약</span>
       </div>
+      {details && (
+        <dl className="metricGrid compact">
+          <Metric label="Workers" value={details.workers} />
+          <Metric label="Shards" value={details.shards} />
+          <Metric label="Samples" value={details.samples} />
+        </dl>
+      )}
       <pre className="summaryBox">{summary ? JSON.stringify(summary, null, 2) : '아직 summary 파일이 없습니다.'}</pre>
     </section>
   );
@@ -311,4 +342,19 @@ function compactJson(entry: TrainingLogEntry): string {
 
 function formatPercent(value: number | null | undefined): string {
   return typeof value === 'number' ? `${Math.round(value * 100)}%` : '-';
+}
+
+function parallelSummaryDetails(summary: Record<string, unknown> | null | undefined) {
+  if (!summary) return null;
+  const iterations = Array.isArray(summary.iterations) ? summary.iterations : [];
+  const latest = iterations[iterations.length - 1];
+  if (!latest || typeof latest !== 'object' || !('metrics' in latest)) return null;
+  const metrics = latest.metrics;
+  if (!metrics || typeof metrics !== 'object' || !('selfPlay' in metrics)) return null;
+  const selfPlay = metrics.selfPlay as Record<string, unknown>;
+  return {
+    workers: String(selfPlay.workers ?? '-'),
+    shards: String(selfPlay.shardCount ?? '-'),
+    samples: String(selfPlay.sampleCount ?? '-')
+  };
 }
