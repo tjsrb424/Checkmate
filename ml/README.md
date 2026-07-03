@@ -105,6 +105,16 @@ npm run ml:az:quick
 
 The quick loop generates self-play data, trains a dual-head `AlphaZeroNet`, writes latest model metrics, and stores a versioned checkpoint under `data/models/checkpoints/`.
 
+## Model Arena And Promotion
+
+Sprint 23 adds a checkpoint registry plus candidate-vs-champion arena:
+
+```bash
+npm run ml:model-arena:quick
+```
+
+Promotion rule: a candidate is marked `promoted` when its arena score rate is at least 55% with zero forfeits and zero illegal moves. Quick mode is only a smoke check; meaningful promotion needs many more games.
+
 ## TypeScript to Python JSON Contract
 
 Positions exported from the TypeScript engine should use this structure:

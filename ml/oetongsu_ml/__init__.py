@@ -16,6 +16,7 @@ from .schema import (
 from .inference import PolicyValueModel, RandomPolicyValueModel, TorchPolicyValueModel
 from .self_play import SelfPlayConfig, SelfPlayGameResult, play_self_play_game
 from .alphazero_model import AlphaZeroNet
+from .model_arena import ModelArenaConfig, ModelArenaResult, RandomModelPlayer, run_model_arena
 
 __all__ = [
     "BOARD_HEIGHT",
@@ -46,4 +47,8 @@ __all__ = [
     "SelfPlayGameResult",
     "play_self_play_game",
     "AlphaZeroNet",
+    "ModelArenaConfig",
+    "ModelArenaResult",
+    "RandomModelPlayer",
+    "run_model_arena",
 ]

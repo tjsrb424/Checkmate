@@ -8,6 +8,7 @@ import torch
 
 from .constants import POLICY_SIZE
 from .encoder import encode_position
+from .alphazero_model import AlphaZeroNet
 from .model import PolicyNet, ValueNet
 from .schema import TrainingPosition
 
@@ -59,3 +60,21 @@ class TorchPolicyValueModel(PolicyValueModel):
             policy = torch.softmax(logits, dim=1).squeeze(0).cpu().numpy().astype(np.float32)
             value = float(self.value_model(features).squeeze().cpu())
         return policy, float(np.clip(value, -1.0, 1.0))
+
+
+class TorchAlphaZeroModel(PolicyValueModel):
+    def __init__(self, checkpoint: str | Path, device: str | torch.device | None = None) -> None:
+        self.device = torch.device(device) if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        state = torch.load(checkpoint, map_location=self.device)
+        self.model = AlphaZeroNet(channels=int(state.get("channels", 64))).to(self.device)
+        self.model.load_state_dict(state["model_state"])
+        self.model.eval()
+
+    def predict(self, position: TrainingPosition | dict) -> tuple[np.ndarray, float]:
+        parsed = TrainingPosition.from_raw(position)
+        features = torch.from_numpy(encode_position(parsed)).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            policy_logits, value = self.model(features)
+            policy = torch.softmax(policy_logits, dim=1).squeeze(0).cpu().numpy().astype(np.float32)
+            value_float = float(value.squeeze().cpu())
+        return policy, float(np.clip(value_float, -1.0, 1.0))

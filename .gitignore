@@ -17,6 +17,8 @@ data/ml/*.json
 data/ml/*.jsonl
 data/models/
 data/models/checkpoints/
+data/models/arena/
+data/models/registry.json
 data/selfplay/*.json
 data/selfplay/*.jsonl
 data/arena/*.json
