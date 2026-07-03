@@ -34,6 +34,7 @@ import {
   isAiWorkerResponse,
   isLatestWorkerResponse
 } from './workers/aiWorkerProtocol';
+import { TrainingTab } from './components/TrainingTab';
 
 const pieceLabels = {
   CHO: {
@@ -62,6 +63,7 @@ const sideLabels: Record<Side, string> = {
 };
 
 type BoardSeat = 'bottom' | 'top';
+type AppTab = 'play' | 'training';
 
 const boardSeatLabels: Record<BoardSeat, string> = {
   bottom: '아래',
@@ -83,6 +85,7 @@ interface GameStartConfig {
 }
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState<AppTab>('play');
   const [humanSide, setHumanSide] = useState<Side>('CHO');
   const [humanSeat, setHumanSeat] = useState<BoardSeat>('bottom');
   const [choFormation, setChoFormation] = useState<Formation>('inner-elephant');
@@ -349,15 +352,32 @@ export default function App() {
             <p className="eyebrow">외통수 베타</p>
             <h1>사람 vs AI 장기</h1>
             <p className="betaNotice">AI 대국 베타입니다. 실수할 수 있으며, 분석과 개선을 계속 진행 중입니다.</p>
+            <nav className="appTabs" aria-label="Oetongsu sections">
+              <button className={activeTab === 'play' ? 'active' : ''} onClick={() => setActiveTab('play')}>
+                대국
+              </button>
+              <button className={activeTab === 'training' ? 'active' : ''} onClick={() => setActiveTab('training')}>
+                훈련
+              </button>
+            </nav>
           </div>
-          <div className="statusPanel">
-            <span className={`turnBadge ${game.turn.toLowerCase()}`}>{sideLabels[game.turn]} 차례</span>
-            <strong>{gameStatusLabel}</strong>
-            <small>{aiError || lastSearch || '탐색 기반 착수'}</small>
-          </div>
+          {activeTab === 'play' ? (
+            <div className="statusPanel">
+              <span className={`turnBadge ${game.turn.toLowerCase()}`}>{sideLabels[game.turn]} 차례</span>
+              <strong>{gameStatusLabel}</strong>
+              <small>{aiError || lastSearch || '탐색 기반 착수'}</small>
+            </div>
+          ) : (
+            <div className="statusPanel">
+              <span className="trainingBadge">LOCAL</span>
+              <strong>Training Server</strong>
+              <small>127.0.0.1:8765</small>
+            </div>
+          )}
         </header>
 
-        <div className="playLayout">
+        {activeTab === 'play' ? (
+          <div className="playLayout">
           <BoardView
             game={game}
             humanSide={humanSide}
@@ -501,6 +521,9 @@ export default function App() {
             <MoveList history={game.history} humanSide={humanSide} />
           </aside>
         </div>
+        ) : (
+          <TrainingTab />
+        )}
       </section>
     </main>
   );

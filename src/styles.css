@@ -519,19 +519,323 @@ select {
   text-align: right;
 }
 
+.appTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.appTabs button {
+  min-height: 36px;
+  padding: 8px 13px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 6px;
+  color: #243044;
+  background: rgba(255, 252, 245, 0.76);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.appTabs button.active {
+  color: #fff;
+  border-color: rgba(31, 59, 88, 0.82);
+  background: #243044;
+}
+
+.trainingBadge,
+.statusPill {
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: white;
+  background: #48645a;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.trainingTab {
+  display: grid;
+  gap: 18px;
+}
+
+.trainingHero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 252, 245, 0.8);
+}
+
+.trainingHero h2 {
+  margin: 0;
+  color: #111827;
+  font-size: clamp(1.65rem, 4vw, 3rem);
+  line-height: 1;
+}
+
+.trainingHero p:last-child,
+.panelText {
+  max-width: 720px;
+  margin: 8px 0 0;
+  color: #5f6b7a;
+  line-height: 1.45;
+}
+
+.trainingAlert {
+  display: grid;
+  gap: 5px;
+  padding: 14px 16px;
+  border: 1px solid rgba(162, 59, 48, 0.28);
+  border-radius: 8px;
+  color: #6f2d27;
+  background: rgba(255, 241, 238, 0.86);
+}
+
+.trainingAlert code {
+  color: #243044;
+}
+
+.trainingGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.trainingGrid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.trainingPanel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 252, 245, 0.82);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panelHeader small {
+  color: #657186;
+  font-weight: 760;
+}
+
+.statusPill.running {
+  background: #236847;
+}
+
+.statusPill.failed {
+  background: #a23b30;
+}
+
+.statusPill.idle {
+  background: #6a7280;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.metricGrid div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(38, 56, 77, 0.08);
+}
+
+.metricGrid dt {
+  color: #657186;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.metricGrid dd {
+  margin: 3px 0 0;
+  color: #182232;
+  font-size: 0.9rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trainingActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.secondaryAction,
+.dangerAction {
+  min-height: 38px;
+  padding: 9px 12px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 6px;
+  color: #243044;
+  background: rgba(255, 255, 255, 0.64);
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.dangerAction {
+  color: #8f2e27;
+  border-color: rgba(162, 59, 48, 0.28);
+  background: rgba(255, 241, 238, 0.78);
+}
+
+.secondaryAction:disabled,
+.dangerAction:disabled {
+  color: #9aa3b2;
+  cursor: not-allowed;
+  background: rgba(231, 226, 216, 0.7);
+}
+
+.actionMessage {
+  margin: 0;
+  color: #255f85;
+  font-weight: 800;
+}
+
+.trainingForm {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.trainingForm label {
+  display: grid;
+  gap: 5px;
+  color: #657186;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.trainingForm input,
+.trainingForm select {
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid rgba(29, 36, 48, 0.16);
+  border-radius: 6px;
+  color: #182232;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.modelList,
+.arenaList,
+.logList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.modelList li,
+.arenaList li,
+.logList li {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(38, 56, 77, 0.08);
+}
+
+.modelList li {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.modelList strong,
+.arenaList strong,
+.logList strong {
+  color: #182232;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelList span,
+.arenaList span,
+.arenaList small {
+  color: #657186;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.summaryBox {
+  min-height: 188px;
+  max-height: 300px;
+  margin: 0;
+  padding: 12px;
+  border-radius: 6px;
+  color: #243044;
+  background: rgba(24, 34, 50, 0.06);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow: auto;
+}
+
+.logList {
+  max-height: 380px;
+  overflow: auto;
+}
+
+.logList code {
+  color: #5f6b7a;
+  font-size: 0.76rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.emptyState {
+  color: #657186;
+  font-size: 0.84rem;
+}
+
 @media (max-width: 900px) {
   .appShell {
     padding: 18px;
   }
 
   .topBar,
-  .playLayout {
+  .playLayout,
+  .trainingGrid,
+  .trainingGrid.three {
     grid-template-columns: 1fr;
     display: grid;
   }
 
   .statusPanel {
     width: 100%;
+  }
+
+  .trainingHero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .metricGrid,
+  .trainingForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -561,5 +865,10 @@ select {
 
   .controlRail {
     gap: 11px;
+  }
+
+  .metricGrid,
+  .trainingForm {
+    grid-template-columns: 1fr;
   }
 }

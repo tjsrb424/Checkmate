@@ -155,6 +155,31 @@ python -m oetongsu_ml.autotrain --iterations 10 --gamesPerIteration 100 --simula
 
 `supervised_v0001` is an opening-record bootstrap champion, not proof of playing strength. Strength should be judged only through repeated AutoTrain iterations and arena promotion.
 
+## Local Training Server
+
+Sprint 26 adds a local FastAPI server that exposes AutoTrain controls and training artifacts to the React `훈련` tab.
+
+From the repository root:
+
+```bash
+npm run training:server
+```
+
+Development reload mode:
+
+```bash
+npm run training:server:dev
+```
+
+The server binds to `127.0.0.1:8765` and intentionally refuses non-local hosts for the MVP. It exposes health, training status, AutoTrain start/stop, model registry, recent logs, summary, and arena result endpoints.
+
+The AutoTrain subprocess stdout and stderr are captured at:
+
+- `data/training/server_last_stdout.log`
+- `data/training/server_last_stderr.log`
+
+See `docs/TRAINING_UI.md` for the UI workflow and endpoint list.
+
 ## Kakao-Like Ruleset
 
 Pre-Sprint 24B defines explicit TS/Python rulesets before larger self-play runs. Python self-play and model arena can use the `kakao-like` ruleset, which keeps third-position repetition bans and adjudicates max-ply endings by material score with Han deom 1.5.
