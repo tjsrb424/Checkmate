@@ -6,7 +6,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,16 +25,16 @@ ALLOWED_ORIGINS = [
 
 class StartAutoTrainRequest(BaseModel):
     quick: bool = False
-    iterations: int | None = None
-    gamesPerIteration: int | None = None
-    simulations: int | None = None
-    maxPlies: int | None = None
-    trainEpochs: int | None = None
-    batchSize: int | None = None
-    promotionGames: int | None = None
-    threshold: float | None = None
-    ruleset: Literal["kakao-like", "oetongsu-basic", "kja-like"] | None = None
-    selfplayWorkers: int | None = None
+    iterations: Optional[int] = None
+    gamesPerIteration: Optional[int] = None
+    simulations: Optional[int] = None
+    maxPlies: Optional[int] = None
+    trainEpochs: Optional[int] = None
+    batchSize: Optional[int] = None
+    promotionGames: Optional[int] = None
+    threshold: Optional[float] = None
+    ruleset: Optional[Literal["kakao-like", "oetongsu-basic", "kja-like"]] = None
+    selfplayWorkers: Optional[int] = None
     parallelSelfPlay: bool = False
 
 
