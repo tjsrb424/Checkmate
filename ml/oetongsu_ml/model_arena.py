@@ -155,6 +155,7 @@ def play_arena_game(
     forfeits = 0
     winner: Side | None = None
     outcome = "draw_max_plies"
+    final_score: dict[str, Any] | None = None
 
     for ply in range(config.max_plies):
         legal_moves = generate_legal_moves(position, ruleset=ruleset)
@@ -185,18 +186,23 @@ def play_arena_game(
         if ruleset.max_ply_policy == "score-adjudication":
             score = score_board_material(position.board)
             winner = score["winner"] if score["winner"] in ("CHO", "HAN") else None
+            final_score = score
             outcome = "score_adjudication" if winner is not None else "draw_max_plies"
         else:
             outcome = "draw_max_plies"
         ply = config.max_plies - 1
 
-    return {
+    summary = {
         "game": game_index + 1,
         "candidateSide": candidate_side,
         "championSide": champion_side,
         "winner": winner,
         "outcome": outcome,
         "plies": max(0, ply + 1 if config.max_plies > 0 else 0),
+        "maxPlies": config.max_plies,
         "illegalMoves": illegal_moves,
         "forfeits": forfeits,
     }
+    if final_score is not None:
+        summary["finalScore"] = final_score
+    return summary

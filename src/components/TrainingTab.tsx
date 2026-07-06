@@ -255,6 +255,7 @@ function ProgressPanel({ progress }: { progress: TrainingProgressResponse | null
   const result = item?.result ?? {};
   const resultStatus = displayResult(result.status, result.promoted);
   const threshold = promotionThresholdValue(models.promotionThreshold);
+  const arenaWarnings = arenaDiagnosticWarnings(arena);
 
   if (!progress || progress.offline) {
     return (
@@ -345,6 +346,14 @@ function ProgressPanel({ progress }: { progress: TrainingProgressResponse | null
         />
       </div>
       <p className="promotionHint">{promotionJudgement(arena, threshold)}</p>
+      {arenaWarnings.length > 0 && (
+        <div className="arenaWarningBox">
+          <strong>승격 대국 신뢰도 경고</strong>
+          {arenaWarnings.map((warning) => (
+            <span key={warning}>{warning}</span>
+          ))}
+        </div>
+      )}
       <p className="progressGlossary">
         자기대국은 AI가 스스로 대국 데이터를 만드는 단계입니다. 후보 학습은 그 데이터로 새 모델을 훈련하는 단계이고,
         승격 대국은 후보 AI가 현재 챔피언보다 강한지 확인하는 단계입니다.
@@ -463,6 +472,7 @@ function ArenaPanel({ arena }: { arena: ArenaResultSummary[] }) {
           <li key={result.file ?? result.path}>
             <strong>{result.promoted ? '승격' : '검증됨'}</strong>
             <span>{formatPercent(result.candidateScoreRate)} 후보 AI</span>
+            {result.arenaWarnings?.[0] && <em>{result.arenaWarnings[0]}</em>}
             <small>{result.file}</small>
           </li>
         ))}
@@ -612,6 +622,30 @@ function promotionJudgement(arena: Record<string, unknown>, threshold: number): 
     return '현재 기준 승격 기준 이상입니다. 단, 최종 결과는 전체 승격 대국 종료 후 확정됩니다.';
   }
   return '현재 기준 근소하게 승격 기준 아래입니다.';
+}
+
+function arenaDiagnosticWarnings(arena: Record<string, unknown>): string[] {
+  const warnings: string[] = [];
+  const scoreAdjudicationRate = toNumber(arena.scoreAdjudicationRate);
+  const maxPliesReachedRate = toNumber(arena.maxPliesReachedRate);
+  const choWinRate = toNumber(arena.choWinRate);
+  const hanWinRate = toNumber(arena.hanWinRate);
+  const illegalMoves = toNumber(arena.illegalMoves) ?? 0;
+  const forfeits = toNumber(arena.forfeits) ?? 0;
+
+  if (
+    (scoreAdjudicationRate !== null && scoreAdjudicationRate >= 0.9) ||
+    (maxPliesReachedRate !== null && maxPliesReachedRate >= 0.9)
+  ) {
+    warnings.push('승격 대국 대부분이 최대 수순 점수 판정으로 끝났습니다.');
+  }
+  if ((choWinRate !== null && choWinRate >= 0.9) || (hanWinRate !== null && hanWinRate >= 0.9)) {
+    warnings.push('한쪽 진영 승리 비율이 매우 높습니다.');
+  }
+  if (scoreAdjudicationRate !== null && scoreAdjudicationRate >= 0.9 && illegalMoves === 0 && forfeits === 0) {
+    warnings.push('현재 결과는 모델 강도보다 초/한 또는 점수 판정 편향의 영향을 받을 수 있습니다.');
+  }
+  return warnings;
 }
 
 function parallelSummaryDetails(summary: Record<string, unknown> | null | undefined) {

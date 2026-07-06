@@ -800,10 +800,16 @@ select {
 
 .modelList span,
 .arenaList span,
-.arenaList small {
+.arenaList small,
+.arenaList em {
   color: #657186;
   font-size: 0.78rem;
   font-weight: 760;
+}
+
+.arenaList em {
+  color: #8a5b13;
+  font-style: normal;
 }
 
 .summaryBox {
@@ -952,6 +958,24 @@ select {
   font-size: 0.84rem;
   font-weight: 800;
   line-height: 1.45;
+}
+
+.arenaWarningBox {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(173, 113, 19, 0.28);
+  border-radius: 6px;
+  color: #6c4208;
+  background: rgba(255, 179, 71, 0.14);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.arenaWarningBox strong {
+  color: #5c3400;
+  font-size: 0.84rem;
 }
 
 @media (max-width: 900px) {

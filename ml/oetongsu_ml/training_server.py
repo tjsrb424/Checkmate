@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .arena_diagnostics import analyze_arena_payload
 from .model_registry import get_latest_promoted, load_registry
 
 SERVER_VERSION = "0.1.0"
@@ -163,6 +164,7 @@ class TrainingServerController:
         if self.arena_dir.exists():
             for path in sorted(self.arena_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
                 payload = read_json_or_none(path) or {}
+                diagnostics = analyze_arena_payload(payload, str(path)) if payload else None
                 results.append(
                     {
                         "file": path.name,
@@ -173,6 +175,19 @@ class TrainingServerController:
                         "illegalMoves": payload.get("illegalMoves"),
                         "forfeits": payload.get("forfeits"),
                         "averagePlies": payload.get("averagePlies"),
+                        "arenaWarnings": diagnostics.warnings if diagnostics else [],
+                        "scoreAdjudicationRate": (
+                            diagnostics.outcome_counts.get("score_adjudication", 0) / diagnostics.games if diagnostics and diagnostics.games else None
+                        ),
+                        "maxPliesReachedRate": (
+                            diagnostics.max_plies_reached / diagnostics.games if diagnostics and diagnostics.games else None
+                        ),
+                        "choWinRate": (
+                            diagnostics.winner_counts.get("CHO", 0) / diagnostics.games if diagnostics and diagnostics.games else None
+                        ),
+                        "hanWinRate": (
+                            diagnostics.winner_counts.get("HAN", 0) / diagnostics.games if diagnostics and diagnostics.games else None
+                        ),
                         "modifiedAt": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
                     }
                 )

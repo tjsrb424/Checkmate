@@ -51,3 +51,8 @@ def test_model_arena_can_score_adjudicate_max_plies():
     assert result.draws == 0
     assert result.gameSummaries[0]["outcome"] == "score_adjudication"
     assert result.gameSummaries[0]["winner"] == "HAN"
+    assert result.gameSummaries[0]["maxPlies"] == 0
+    assert result.gameSummaries[0]["finalScore"]["winner"] == "HAN"
+    assert "cho" in result.gameSummaries[0]["finalScore"]
+    assert "han" in result.gameSummaries[0]["finalScore"]
+    assert "margin" in result.gameSummaries[0]["finalScore"]

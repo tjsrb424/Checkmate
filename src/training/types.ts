@@ -171,6 +171,11 @@ export interface ArenaResultSummary {
   illegalMoves?: number | null;
   forfeits?: number | null;
   averagePlies?: number | null;
+  arenaWarnings?: string[];
+  scoreAdjudicationRate?: number | null;
+  maxPliesReachedRate?: number | null;
+  choWinRate?: number | null;
+  hanWinRate?: number | null;
   modifiedAt?: string;
 }
 

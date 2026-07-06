@@ -26,4 +26,4 @@ def score_board_material(board) -> dict:
     cho = score_side_material(board, "CHO")
     han = score_side_material(board, "HAN")
     winner: Side | str = "CHO" if cho > han else "HAN" if han > cho else "DRAW"
-    return {"cho": cho, "han": han, "winner": winner}
+    return {"cho": cho, "han": han, "winner": winner, "margin": abs(cho - han)}
