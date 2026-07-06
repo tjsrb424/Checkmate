@@ -156,13 +156,13 @@ export function TrainingTab() {
           {message && <p className="actionMessage">{message}</p>}
           <div className="trainingActions">
             <button className="primaryAction" onClick={handleQuickStart} disabled={busy || running}>
-              Quick Start
+              빠른 실행
             </button>
             <button className="secondaryAction" onClick={handleCustomStart} disabled={busy || running}>
-              Custom Start
+              사용자 지정 실행
             </button>
             <button className="dangerAction" onClick={handleStop} disabled={busy || !running}>
-              Stop
+              중지
             </button>
           </div>
         </section>
@@ -172,32 +172,32 @@ export function TrainingTab() {
             <span className="groupLabel">사용자 지정 실행</span>
           </div>
           <div className="trainingForm">
-            <NumberField label="Iterations" value={form.iterations} min={1} onChange={(value) => updateForm('iterations', value)} />
+            <NumberField label="학습 회차" value={form.iterations} min={1} onChange={(value) => updateForm('iterations', value)} />
             <NumberField
-              label="Games"
+              label="자기대국 수"
               value={form.gamesPerIteration}
               min={1}
               onChange={(value) => updateForm('gamesPerIteration', value)}
             />
-            <NumberField label="Simulations" value={form.simulations} min={1} onChange={(value) => updateForm('simulations', value)} />
-            <NumberField label="Max plies" value={form.maxPlies} min={4} onChange={(value) => updateForm('maxPlies', value)} />
-            <NumberField label="Epochs" value={form.trainEpochs} min={1} onChange={(value) => updateForm('trainEpochs', value)} />
-            <NumberField label="Batch" value={form.batchSize} min={1} onChange={(value) => updateForm('batchSize', value)} />
+            <NumberField label="탐색 횟수" value={form.simulations} min={1} onChange={(value) => updateForm('simulations', value)} />
+            <NumberField label="최대 수순" value={form.maxPlies} min={4} onChange={(value) => updateForm('maxPlies', value)} />
+            <NumberField label="반복 학습" value={form.trainEpochs} min={1} onChange={(value) => updateForm('trainEpochs', value)} />
+            <NumberField label="묶음 학습" value={form.batchSize} min={1} onChange={(value) => updateForm('batchSize', value)} />
             <NumberField
-              label="Arena games"
+              label="승격 대국 수"
               value={form.promotionGames}
               min={1}
               onChange={(value) => updateForm('promotionGames', value)}
             />
             <NumberField
-              label="Workers"
+              label="작업자 수"
               value={form.selfplayWorkers}
               min={1}
               onChange={(value) => updateForm('selfplayWorkers', value)}
             />
-            <NumberField label="Threshold" value={form.threshold} min={0} step={0.01} onChange={(value) => updateForm('threshold', value)} />
+            <NumberField label="승격 기준" value={form.threshold} min={0} step={0.01} onChange={(value) => updateForm('threshold', value)} />
             <label>
-              <span>Ruleset</span>
+              <span>룰셋</span>
               <select value={form.ruleset} onChange={(event) => updateForm('ruleset', event.target.value as typeof form.ruleset)}>
                 {rulesetOptions.map((ruleset) => (
                   <option key={ruleset} value={ruleset}>
@@ -212,7 +212,7 @@ export function TrainingTab() {
                 checked={form.parallelSelfPlay}
                 onChange={(event) => updateForm('parallelSelfPlay', event.target.checked)}
               />
-              <span>Parallel self-play</span>
+              <span>병렬 자기대국</span>
             </label>
           </div>
         </section>
@@ -328,7 +328,7 @@ function ProgressPanel({ progress }: { progress: TrainingProgressResponse | null
           rows={[
             ['현재 챔피언', valueText(models.championVersion ?? models.latestPromotedVersion)],
             ['후보 AI', valueText(models.candidateVersion)],
-            ['승격 기준', '55%'],
+            ['승격 기준', thresholdText(models.promotionThreshold)],
             ['결과', resultStatus]
           ]}
         />
@@ -397,8 +397,8 @@ function RegistryPanel({ registry, models }: { registry: ModelRegistryResponse |
   return (
     <section className="trainingPanel">
       <div className="panelHeader">
-        <span className="groupLabel">모델 Registry</span>
-        <small>{registry?.promotedCount ?? 0} promoted</small>
+        <span className="groupLabel">모델 목록</span>
+        <small>{registry?.promotedCount ?? 0} 승격</small>
       </div>
       <ul className="modelList">
         {models.length === 0 ? (
@@ -407,7 +407,7 @@ function RegistryPanel({ registry, models }: { registry: ModelRegistryResponse |
           models.map((model, index) => (
             <li key={`${model.version ?? 'model'}-${index}`}>
               <strong>{model.version ?? 'unknown'}</strong>
-              <span>{model.status ?? 'unknown'}</span>
+              <span>{modelStatusLabel(model.status)}</span>
             </li>
           ))
         )}
@@ -425,12 +425,12 @@ function SummaryPanel({ summary }: { summary: Record<string, unknown> | null | u
       </div>
       {details && (
         <dl className="metricGrid compact">
-          <Metric label="Workers" value={details.workers} />
-          <Metric label="Shards" value={details.shards} />
-          <Metric label="Samples" value={details.samples} />
-          <Metric label="Samples/sec" value={details.samplesPerSec} />
-          <Metric label="Games/sec" value={details.gamesPerSec} />
-          <Metric label="Inference ms" value={details.inferenceMs} />
+          <Metric label="작업자 수" value={details.workers} />
+          <Metric label="샤드 수" value={details.shards} />
+          <Metric label="샘플 수" value={details.samples} />
+          <Metric label="초당 샘플" value={details.samplesPerSec} />
+          <Metric label="초당 대국" value={details.gamesPerSec} />
+          <Metric label="추론 ms" value={details.inferenceMs} />
           <Metric label="MCTS ms" value={details.mctsMs} />
         </dl>
       )}
@@ -449,8 +449,8 @@ function ArenaPanel({ arena }: { arena: ArenaResultSummary[] }) {
       <ul className="arenaList">
         {arena.slice(0, 5).map((result) => (
           <li key={result.file ?? result.path}>
-            <strong>{result.promoted ? 'Promoted' : 'Checked'}</strong>
-            <span>{formatPercent(result.candidateScoreRate)} candidate</span>
+            <strong>{result.promoted ? '승격' : '검증됨'}</strong>
+            <span>{formatPercent(result.candidateScoreRate)} 후보 AI</span>
             <small>{result.file}</small>
           </li>
         ))}
@@ -461,7 +461,7 @@ function ArenaPanel({ arena }: { arena: ArenaResultSummary[] }) {
 }
 
 function StatusPill({ status }: { status: string }) {
-  return <span className={`statusPill ${status}`}>{status}</span>;
+  return <span className={`statusPill ${status}`}>{statusLabel(status)}</span>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -524,6 +524,17 @@ function ratioText(current: unknown, total: unknown): string {
 
 function percentText(value: unknown): string {
   return typeof value === 'number' ? `${(value * 100).toFixed(1)}%` : '-';
+}
+
+function thresholdText(value: unknown): string {
+  return typeof value === 'number' ? `${Math.round(value * 100)}%` : '55%';
+}
+
+function modelStatusLabel(status: unknown): string {
+  if (status === 'promoted') return '승격';
+  if (status === 'candidate') return '후보 AI';
+  if (status === 'rejected') return '미승격';
+  return valueText(status);
 }
 
 function displayResult(status: unknown, promoted: unknown): string {

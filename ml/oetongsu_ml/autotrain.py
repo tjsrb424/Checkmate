@@ -170,15 +170,16 @@ def run_autotrain(config: AutoTrainConfig | None = None) -> AutoTrainRunResult:
         registry = load_registry(cfg.registry_path)
         start_iteration = state.completedIterations + 1 if cfg.resume else 1
         for iteration in range(start_iteration, cfg.iterations + 1):
+            completed_before_current = state.completedIterations
+            reporter.start_iteration()
             state.currentIteration = iteration
             state.updatedAt = utc_now()
             save_autotrain_state(state_path, state)
 
-            result = run_autotrain_iteration(cfg, registry, iteration, reporter, state.completedIterations)
+            result = run_autotrain_iteration(cfg, registry, iteration, reporter, completed_before_current)
             completed.append(result)
             append_iteration_log(log_path, result)
 
-            state.completedIterations = iteration
             state.latestCandidateVersion = result.candidateVersion
             state.latestChampionVersion = result.candidateVersion if result.promoted else result.championVersion
             state.lastSelfPlayPath = result.selfplayPath
@@ -193,7 +194,7 @@ def run_autotrain(config: AutoTrainConfig | None = None) -> AutoTrainRunResult:
                 message="Iteration result saved",
                 message_ko="학습 회차 결과를 저장했습니다.",
                 current_iteration=iteration,
-                completed_iterations=state.completedIterations,
+                completed_iterations=completed_before_current,
                 self_play=previous_progress.selfPlay if previous_progress else {},
                 training=previous_progress.training if previous_progress else {},
                 arena=previous_progress.arena if previous_progress else {},
@@ -202,10 +203,14 @@ def run_autotrain(config: AutoTrainConfig | None = None) -> AutoTrainRunResult:
                     "championVersion": result.championVersion,
                     "candidateVersion": result.candidateVersion,
                     "latestPromotedVersion": state.latestChampionVersion,
+                    "promotionThreshold": cfg.promotion_threshold,
                 },
                 result={"promoted": result.promoted, "status": result.status},
                 progress_accuracy="iteration_complete",
             )
+            state.completedIterations = iteration
+            state.updatedAt = utc_now()
+            save_autotrain_state(state_path, state)
 
             if cfg.strict and result.metrics.get("arena", {}).get("illegalMoves", 0) + result.metrics.get("arena", {}).get("forfeits", 0) > 0:
                 raise RuntimeError("strict autotrain stopped after illegal moves or forfeits")
@@ -262,6 +267,7 @@ def run_autotrain_iteration(
         "championVersion": champion_version,
         "candidateVersion": candidate_version,
         "latestPromotedVersion": champion_version,
+        "promotionThreshold": cfg.promotion_threshold,
     }
     if reporter:
         reporter.update(

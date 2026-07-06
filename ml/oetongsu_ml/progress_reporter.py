@@ -80,6 +80,12 @@ class ProgressReporter:
         self.phase_progress = {"selfplay": 0.0, "train": 0.0, "arena": 0.0, "package": 0.0}
         self.last_snapshot: ProgressSnapshot | None = None
 
+    def reset_phase_progress(self) -> None:
+        self.phase_progress = {"selfplay": 0.0, "train": 0.0, "arena": 0.0, "package": 0.0}
+
+    def start_iteration(self) -> None:
+        self.reset_phase_progress()
+
     def update(
         self,
         *,
@@ -108,6 +114,8 @@ class ProgressReporter:
         overall = self.overall_percent(completed_iterations, phase)
         if status == "completed":
             overall = 100.0
+        else:
+            overall = min(overall, 99.9)
         phase_value = 100.0 if phase == "completed" else clamp_percent(phase_percent)
         now = utc_now()
         elapsed = max(0, int(datetime.now(timezone.utc).timestamp() - self.started_at_unix))

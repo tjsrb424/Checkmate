@@ -104,3 +104,58 @@ def test_autotrain_uses_promoted_bootstrap_champion_without_random_fallback(tmp_
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
     candidate = next(entry for entry in registry["models"] if entry["version"] == "az_iter_000001")
     assert candidate["parentVersion"] == "supervised_v0001"
+
+
+def test_two_iteration_progress_does_not_complete_after_first_iteration(tmp_path):
+    result = run_autotrain(quick_config(tmp_path, iterations=2))
+
+    assert result.completedIterations == 2
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "training" / "progress_events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    package_events = [event for event in events if event["phaseKey"] == "package"]
+    assert len(package_events) == 2
+    assert package_events[0]["overallPercent"] == 50
+    assert package_events[1]["overallPercent"] < 100
+
+    first_package_index = events.index(package_events[0])
+    later_selfplay = next(event for event in events[first_package_index + 1 :] if event["phaseKey"] == "selfplay")
+    assert later_selfplay["overallPercent"] >= 50
+    assert later_selfplay["overallPercent"] < 100
+
+    terminal_events = [event for event in events if event["status"] == "completed"]
+    assert terminal_events[-1]["overallPercent"] == 100
+    for event in events[: events.index(terminal_events[-1])]:
+        assert event["overallPercent"] < 100
+
+
+def test_resume_progress_starts_from_completed_iterations(tmp_path):
+    training_dir = tmp_path / "training"
+    training_dir.mkdir(parents=True)
+    state = {
+        "runId": "autotrain-resume",
+        "startedAt": "2026-07-06T00:00:00+00:00",
+        "updatedAt": "2026-07-06T00:00:00+00:00",
+        "currentIteration": 1,
+        "completedIterations": 1,
+        "latestChampionVersion": None,
+        "latestCandidateVersion": "az_iter_000001",
+        "lastSelfPlayPath": None,
+        "lastCandidatePath": None,
+        "lastArenaResultPath": None,
+        "status": "completed",
+    }
+    (training_dir / "autotrain_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    result = run_autotrain(quick_config(tmp_path, iterations=2, resume=True))
+
+    assert result.completedIterations == 2
+    events = [
+        json.loads(line)
+        for line in (training_dir / "progress_events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    first_selfplay = next(event for event in events if event["phaseKey"] == "selfplay")
+    assert first_selfplay["overallPercent"] == 50
+    assert events[-1]["status"] == "completed"
+    assert events[-1]["overallPercent"] == 100
