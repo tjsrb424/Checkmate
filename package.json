@@ -21,6 +21,8 @@
     "training:server": "node scripts/run-training-server.cjs",
     "training:server:dev": "node scripts/run-training-server.cjs --reload",
     "ml:test": "node scripts/run-ml-tests.cjs",
+    "ml:progress": "cd ml && python -m oetongsu_ml.progress_viewer",
+    "ml:progress:watch": "cd ml && python -m oetongsu_ml.progress_viewer --watch",
     "ml:export-policy": "tsx scripts/export-policy-data.ts",
     "ml:export-policy:sample": "tsx scripts/export-policy-data.ts --input data/fixtures/opening-records.sample.csv --output data/ml/policy_samples.sample.jsonl --summary data/ml/policy_samples_summary.sample.json",
     "ml:export-value": "tsx scripts/export-value-data.ts",

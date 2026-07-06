@@ -841,7 +841,7 @@ select {
   gap: 16px;
 }
 
-.progressOverview {
+.progressDashboard {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
@@ -943,6 +943,17 @@ select {
   line-height: 1.45;
 }
 
+.promotionHint {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #1f3b2e;
+  background: rgba(35, 104, 71, 0.11);
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 @media (max-width: 900px) {
   .appShell {
     padding: 18px;
@@ -967,7 +978,7 @@ select {
 
   .metricGrid,
   .trainingForm,
-  .progressOverview,
+  .progressDashboard,
   .progressCards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1003,7 +1014,7 @@ select {
 
   .metricGrid,
   .trainingForm,
-  .progressOverview,
+  .progressDashboard,
   .progressCards {
     grid-template-columns: 1fr;
   }

@@ -121,9 +121,9 @@ export function TrainingTab() {
     <section className="trainingTab" aria-label="Local training control">
       <div className="trainingHero">
         <div>
-          <p className="eyebrow">Local AlphaZero Pipeline</p>
+          <p className="eyebrow">로컬 AlphaZero 학습</p>
           <h2>훈련 제어판</h2>
-          <p>로컬 FastAPI 서버와 연결해 AutoTrain 실행, 모델 registry, arena 결과, 최근 로그를 확인합니다.</p>
+          <p>로컬 FastAPI 서버와 연결해 자동 학습 실행, 모델 목록, 승격 대국 결과, 최근 로그를 확인합니다.</p>
         </div>
         <button className="secondaryAction" onClick={() => void refresh()} disabled={busy}>
           새로고침
@@ -227,7 +227,7 @@ export function TrainingTab() {
       <section className="trainingPanel">
         <div className="panelHeader">
           <span className="groupLabel">최근 로그</span>
-          <small>{logs?.entries?.length ?? 0} entries</small>
+          <small>{logs?.entries?.length ?? 0}개 로그</small>
         </div>
         <ol className="logList">
           {(logs?.entries ?? []).slice(-10).reverse().map((entry, index) => (
@@ -254,6 +254,7 @@ function ProgressPanel({ progress }: { progress: TrainingProgressResponse | null
   const models = item?.models ?? {};
   const result = item?.result ?? {};
   const resultStatus = displayResult(result.status, result.promoted);
+  const threshold = promotionThresholdValue(models.promotionThreshold);
 
   if (!progress || progress.offline) {
     return (
@@ -285,11 +286,15 @@ function ProgressPanel({ progress }: { progress: TrainingProgressResponse | null
         <span className="groupLabel">학습 진행 상황</span>
         <StatusPill status={item.status ?? 'idle'} />
       </div>
-      <div className="progressOverview">
+      <div className="progressDashboard">
         <Metric label="현재 상태" value={item.statusLabelKo ?? statusLabel(item.status)} />
         <Metric label="현재 단계" value={item.phaseLabelKo ?? phaseLabel(item.phaseKey)} />
+        <Metric label="전체 진행률" value={percentValueText(item.overallPercent)} />
+        <Metric label="단계 진행률" value={percentValueText(item.phasePercent)} />
         <Metric label="경과 시간" value={item.elapsedText ?? '-'} />
         <Metric label="예상 남은 시간" value={item.etaText ?? '-'} />
+        <Metric label="시작" value={formatKst(item.startedAt)} />
+        <Metric label="최근 갱신" value={formatKst(item.updatedAt)} />
       </div>
       <div className="progressBars">
         <ProgressBar label="전체 진행률" value={item.overallPercent} />
@@ -318,7 +323,13 @@ function ProgressPanel({ progress }: { progress: TrainingProgressResponse | null
           title="승격 대국"
           rows={[
             ['대국', ratioText(arena.currentGames, arena.totalGames)],
+            ['후보 승리', valueText(arena.candidateWins)],
+            ['챔피언 승리', valueText(arena.championWins)],
+            ['무승부', valueText(arena.draws)],
             ['후보 점수율', percentText(arena.candidateScoreRate)],
+            ['승격 기준', thresholdText(threshold)],
+            ['남은 대국', remainingGamesText(arena.currentGames, arena.totalGames)],
+            ['필요 점수', promotionNeedText(arena, threshold)],
             ['불법 수', valueText(arena.illegalMoves)],
             ['기권', valueText(arena.forfeits)]
           ]}
@@ -328,11 +339,12 @@ function ProgressPanel({ progress }: { progress: TrainingProgressResponse | null
           rows={[
             ['현재 챔피언', valueText(models.championVersion ?? models.latestPromotedVersion)],
             ['후보 AI', valueText(models.candidateVersion)],
-            ['승격 기준', thresholdText(models.promotionThreshold)],
+            ['최근 승격', valueText(models.latestPromotedVersion)],
             ['결과', resultStatus]
           ]}
         />
       </div>
+      <p className="promotionHint">{promotionJudgement(arena, threshold)}</p>
       <p className="progressGlossary">
         자기대국은 AI가 스스로 대국 데이터를 만드는 단계입니다. 후보 학습은 그 데이터로 새 모델을 훈련하는 단계이고,
         승격 대국은 후보 AI가 현재 챔피언보다 강한지 확인하는 단계입니다.
@@ -421,7 +433,7 @@ function SummaryPanel({ summary }: { summary: Record<string, unknown> | null | u
   return (
     <section className="trainingPanel">
       <div className="panelHeader">
-        <span className="groupLabel">AutoTrain 요약</span>
+        <span className="groupLabel">자동 학습 요약</span>
       </div>
       {details && (
         <dl className="metricGrid compact">
@@ -443,7 +455,7 @@ function ArenaPanel({ arena }: { arena: ArenaResultSummary[] }) {
   return (
     <section className="trainingPanel">
       <div className="panelHeader">
-        <span className="groupLabel">Arena 결과</span>
+        <span className="groupLabel">승격 대국 결과</span>
         <small>{arena.length}</small>
       </div>
       <ul className="arenaList">
@@ -454,7 +466,7 @@ function ArenaPanel({ arena }: { arena: ArenaResultSummary[] }) {
             <small>{result.file}</small>
           </li>
         ))}
-        {arena.length === 0 && <li className="emptyState">arena 결과가 아직 없습니다.</li>}
+        {arena.length === 0 && <li className="emptyState">승격 대국 결과가 아직 없습니다.</li>}
       </ul>
     </section>
   );
@@ -526,8 +538,16 @@ function percentText(value: unknown): string {
   return typeof value === 'number' ? `${(value * 100).toFixed(1)}%` : '-';
 }
 
+function percentValueText(value: unknown): string {
+  return typeof value === 'number' ? `${value.toFixed(value % 1 === 0 ? 0 : 1)}%` : '-';
+}
+
+function promotionThresholdValue(value: unknown): number {
+  return typeof value === 'number' ? value : 0.55;
+}
+
 function thresholdText(value: unknown): string {
-  return typeof value === 'number' ? `${Math.round(value * 100)}%` : '55%';
+  return typeof value === 'number' ? `${(value * 100).toFixed(1)}%` : '55.0%';
 }
 
 function modelStatusLabel(status: unknown): string {
@@ -543,6 +563,55 @@ function displayResult(status: unknown, promoted: unknown): string {
   if (status === 'completed') return '완료';
   if (status === 'failed') return '실패';
   return '진행 중';
+}
+
+function formatKst(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0) return '-';
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return '-';
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  return `${formatter.format(new Date(timestamp)).replace('T', ' ')} KST`;
+}
+
+function toNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function remainingGamesText(current: unknown, total: unknown): string {
+  const currentValue = toNumber(current);
+  const totalValue = toNumber(total);
+  if (currentValue === null || totalValue === null) return '-';
+  return String(Math.max(0, Math.trunc(totalValue) - Math.trunc(currentValue)));
+}
+
+function promotionNeedText(arena: Record<string, unknown>, threshold: number): string {
+  const currentGames = toNumber(arena.currentGames);
+  const totalGames = toNumber(arena.totalGames);
+  if (currentGames === null || totalGames === null || totalGames <= 0 || currentGames >= totalGames) return '-';
+  const candidateWins = toNumber(arena.candidateWins) ?? 0;
+  const draws = toNumber(arena.draws) ?? 0;
+  const currentScore = candidateWins + draws * 0.5;
+  const requiredScore = Math.max(0, threshold * totalGames - currentScore);
+  const remaining = Math.max(0, Math.trunc(totalGames) - Math.trunc(currentGames));
+  return `남은 ${remaining}판에서 ${requiredScore.toFixed(1)}점 이상`;
+}
+
+function promotionJudgement(arena: Record<string, unknown>, threshold: number): string {
+  const scoreRate = toNumber(arena.candidateScoreRate);
+  if (scoreRate === null) return '승격 대국 결과를 기다리고 있습니다.';
+  if (scoreRate >= threshold) {
+    return '현재 기준 승격 기준 이상입니다. 단, 최종 결과는 전체 승격 대국 종료 후 확정됩니다.';
+  }
+  return '현재 기준 근소하게 승격 기준 아래입니다.';
 }
 
 function parallelSummaryDetails(summary: Record<string, unknown> | null | undefined) {

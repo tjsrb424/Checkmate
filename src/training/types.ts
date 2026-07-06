@@ -118,6 +118,7 @@ export interface TrainingProgress {
   elapsedText?: string;
   etaSeconds?: number | null;
   etaText?: string | null;
+  startedAt?: string | null;
   iteration?: {
     current?: number;
     total?: number;
