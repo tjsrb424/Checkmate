@@ -7,7 +7,7 @@ TRAINING_DIR="$ROOT/data/training"
 PROGRESS_JSON="$TRAINING_DIR/runpod_a2_progress.json"
 MAIN_LOG="$TRAINING_DIR/autotrain_a2_runpod.log"
 AUTOSTOP_LOG="$TRAINING_DIR/autostop.log"
-INPUT_ARTIFACT="$ROOT/oetongsu_supervised_v0001_artifacts.tgz"
+INPUT_ARTIFACT="$ROOT/oetongsu_runpod_a1_artifacts.tgz"
 OUTPUT_ARTIFACT="$ROOT/oetongsu_runpod_a2_artifacts.tgz"
 
 MAX_SECONDS="${MAX_SECONDS:-7200}"
@@ -192,7 +192,7 @@ if not torch.cuda.is_available():
 PY
 }
 
-apply_supervised_artifact() {
+apply_a1_artifact() {
   cd "$ROOT"
   if [ ! -f "$INPUT_ARTIFACT" ]; then
     log "ERROR: missing artifact: $INPUT_ARTIFACT"
@@ -228,6 +228,44 @@ if not entry or entry.get("status") != "promoted":
     raise SystemExit("supervised_v0001 is not promoted")
 if not latest or latest.get("version") != "supervised_v0001":
     raise SystemExit("latest promoted model is not supervised_v0001")
+PY
+
+  python - <<'PY' | tee -a "$MAIN_LOG"
+import json
+from pathlib import Path
+
+state_path = Path("data/training/autotrain_state.json")
+summary_path = Path("data/training/autotrain_summary.json")
+registry_path = Path("data/models/registry.json")
+
+if not state_path.exists():
+    raise SystemExit("missing data/training/autotrain_state.json; A2 resume cannot continue from A1")
+
+state = json.loads(state_path.read_text(encoding="utf-8"))
+completed = int(state.get("completedIterations") or 0)
+print("resume_completedIterations:", completed)
+if completed < 1:
+    raise SystemExit("completedIterations must be >= 1 for A2 resume")
+
+if summary_path.exists():
+    print("resume_summary_present: yes")
+else:
+    print("resume_summary_present: no")
+
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+models = registry.get("models", [])
+promoted = [m for m in models if m.get("status") == "promoted"]
+latest = promoted[-1] if promoted else None
+print("latestPromoted:", latest.get("version") if latest else None)
+
+if not latest or latest.get("version") != "supervised_v0001":
+    raise SystemExit("latest promoted model must remain supervised_v0001")
+
+az1 = next((m for m in models if m.get("version") == "az_iter_000001"), None)
+print("az_iter_000001_status:", az1.get("status") if az1 else None)
+
+if az1 is None:
+    raise SystemExit("missing az_iter_000001 in registry; A1 continuity is not preserved")
 PY
 }
 
@@ -286,8 +324,8 @@ main() {
   write_progress "cuda_check" 4 "Checking GPU and CUDA"
   preflight_cuda
 
-  write_progress "verify_artifact" 8 "Applying supervised_v0001 artifact and verifying registry"
-  apply_supervised_artifact
+  write_progress "verify_artifact" 8 "Applying A1 artifact and verifying supervised_v0001 remains latest promoted"
+  apply_a1_artifact
 
   write_progress "start_watchdog" 12 "Starting autostop watchdog"
   start_watchdog
