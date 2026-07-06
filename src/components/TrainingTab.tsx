@@ -49,6 +49,7 @@ export function TrainingTab() {
     batchSize: 8,
     promotionGames: 4,
     threshold: 0.55,
+    adjudicationDrawMargin: 0,
     ruleset: 'kakao-like',
     selfplayWorkers: 2,
     parallelSelfPlay: true
@@ -196,6 +197,13 @@ export function TrainingTab() {
               onChange={(value) => updateForm('selfplayWorkers', value)}
             />
             <NumberField label="승격 기준" value={form.threshold} min={0} step={0.01} onChange={(value) => updateForm('threshold', value)} />
+            <NumberField
+              label="점수판정 무승부 margin"
+              value={form.adjudicationDrawMargin}
+              min={0}
+              step={0.5}
+              onChange={(value) => updateForm('adjudicationDrawMargin', value)}
+            />
             <label>
               <span>룰셋</span>
               <select value={form.ruleset} onChange={(event) => updateForm('ruleset', event.target.value as typeof form.ruleset)}>
@@ -472,7 +480,30 @@ function ArenaPanel({ arena }: { arena: ArenaResultSummary[] }) {
           <li key={result.file ?? result.path}>
             <strong>{result.promoted ? '승격' : '검증됨'}</strong>
             <span>{formatPercent(result.candidateScoreRate)} 후보 AI</span>
+            <dl className="arenaDiagnosticsMini">
+              <div>
+                <dt>점수 판정</dt>
+                <dd>{formatPercent(result.scoreAdjudicationRate)}</dd>
+              </div>
+              <div>
+                <dt>최대 수순</dt>
+                <dd>{formatPercent(result.maxPliesReachedRate)}</dd>
+              </div>
+              <div>
+                <dt>CHO 승리</dt>
+                <dd>{formatPercent(result.choWinRate)}</dd>
+              </div>
+              <div>
+                <dt>HAN 승리</dt>
+                <dd>{formatPercent(result.hanWinRate)}</dd>
+              </div>
+              <div>
+                <dt>진영 지배 pair</dt>
+                <dd>{pairedDominanceText(result.pairedSummary)}</dd>
+              </div>
+            </dl>
             {result.arenaWarnings?.[0] && <em>{result.arenaWarnings[0]}</em>}
+            {result.pairedSummary?.warnings?.[0] && <em>{result.pairedSummary.warnings[0]}</em>}
             <small>{result.file}</small>
           </li>
         ))}
@@ -501,6 +532,11 @@ function compactJson(entry: TrainingLogEntry): string {
 
 function formatPercent(value: number | null | undefined): string {
   return typeof value === 'number' ? `${Math.round(value * 100)}%` : '-';
+}
+
+function pairedDominanceText(summary: ArenaResultSummary['pairedSummary']): string {
+  if (!summary || typeof summary.sideDominatedPairs !== 'number' || typeof summary.pairs !== 'number') return '-';
+  return `${summary.sideDominatedPairs} / ${summary.pairs}`;
 }
 
 function clampPercent(value: number | undefined): number {

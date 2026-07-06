@@ -30,6 +30,7 @@ class ArenaDiagnostics:
     candidate_cho_wins: int = 0
     candidate_han_games: int = 0
     candidate_han_wins: int = 0
+    paired_summary: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -66,6 +67,9 @@ def analyze_arena_payload(payload: dict[str, Any], path: str = "-") -> ArenaDiag
         forfeits=int(payload.get("forfeits") or 0),
         average_plies=float(payload.get("averagePlies") or 0.0),
     )
+    paired_summary = payload.get("pairedSummary")
+    if isinstance(paired_summary, dict):
+        diagnostics.paired_summary = paired_summary
 
     plies_values: list[int] = []
     explicit_max_values: list[int] = []
@@ -132,6 +136,10 @@ def build_warnings(diagnostics: ArenaDiagnostics) -> list[str]:
         warnings.append("불법 수와 기권이 없는데 결과가 점수 판정에 집중되어 있습니다.")
     if (cho_win_rate >= 0.9 or han_win_rate >= 0.9) and adjudication_rate >= 0.9:
         warnings.append("현재 승격 대국은 모델 강도보다 진영/점수 판정 편향에 지배될 수 있습니다.")
+    pairs = int(diagnostics.paired_summary.get("pairs") or 0) if diagnostics.paired_summary else 0
+    side_dominated = int(diagnostics.paired_summary.get("sideDominatedPairs") or 0) if diagnostics.paired_summary else 0
+    if pairs > 0 and side_dominated / pairs >= 0.9:
+        warnings.append("pair 대부분이 같은 진영 승리로 갈려 후보 AI 강도 비교로 신뢰하기 어렵습니다.")
     return warnings
 
 
@@ -160,7 +168,15 @@ def render_diagnostics(diagnostics: ArenaDiagnostics) -> str:
         "",
         "종료 유형",
     ]
-    for outcome in ("score_adjudication", "checkmate", "illegal_move", "draw_max_plies", "loss_no_legal_moves", "draw_no_legal_moves"):
+    for outcome in (
+        "score_adjudication",
+        "draw_score_adjudication",
+        "checkmate",
+        "illegal_move",
+        "draw_max_plies",
+        "loss_no_legal_moves",
+        "draw_no_legal_moves",
+    ):
         count = diagnostics.outcome_counts.get(outcome, 0)
         lines.append(f"{outcome}: {count} / {games}, {percent(count, games)}")
 
@@ -183,6 +199,21 @@ def render_diagnostics(diagnostics: ArenaDiagnostics) -> str:
                 "후보가 HAN일 때 후보 승리: "
                 f"{diagnostics.candidate_han_wins} / {diagnostics.candidate_han_games}, "
                 f"{percent(diagnostics.candidate_han_wins, diagnostics.candidate_han_games)}"
+            ),
+            "",
+            "Pair 요약",
+            f"pairs: {diagnostics.paired_summary.get('pairs', '-') if diagnostics.paired_summary else '-'}",
+            (
+                "sideDominatedPairs: "
+                f"{diagnostics.paired_summary.get('sideDominatedPairs', '-') if diagnostics.paired_summary else '-'}"
+            ),
+            (
+                "candidateDominatedPairs: "
+                f"{diagnostics.paired_summary.get('candidateDominatedPairs', '-') if diagnostics.paired_summary else '-'}"
+            ),
+            (
+                "championDominatedPairs: "
+                f"{diagnostics.paired_summary.get('championDominatedPairs', '-') if diagnostics.paired_summary else '-'}"
             ),
             "",
             "경고",
@@ -216,6 +247,7 @@ def render_markdown(diagnostics_list: list[ArenaDiagnostics]) -> str:
                 f"- maxPlies 도달: {diagnostics.max_plies_reached} / {diagnostics.games}",
                 f"- CHO 승리: {diagnostics.winner_counts.get('CHO', 0)} / {diagnostics.games}",
                 f"- HAN 승리: {diagnostics.winner_counts.get('HAN', 0)} / {diagnostics.games}",
+                f"- side-dominated pairs: {diagnostics.paired_summary.get('sideDominatedPairs', '-') if diagnostics.paired_summary else '-'}",
                 "",
                 "### 경고",
                 "",

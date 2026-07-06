@@ -812,6 +812,35 @@ select {
   font-style: normal;
 }
 
+.arenaDiagnosticsMini {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 10px;
+  margin: 2px 0;
+}
+
+.arenaDiagnosticsMini div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.arenaDiagnosticsMini dt,
+.arenaDiagnosticsMini dd {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 780;
+}
+
+.arenaDiagnosticsMini dt {
+  color: #657186;
+}
+
+.arenaDiagnosticsMini dd {
+  color: #243044;
+}
+
 .summaryBox {
   min-height: 188px;
   max-height: 300px;

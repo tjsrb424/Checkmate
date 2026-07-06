@@ -34,6 +34,7 @@ class AutoTrainConfig:
     channels: int = 64
     promotion_games: int = 20
     promotion_threshold: float = 0.55
+    adjudication_draw_margin: float = 0.0
     temperature: float = 1.0
     temperature_drop_ply: int = 20
     seed: int = 1
@@ -70,6 +71,7 @@ class AutoTrainConfig:
             channels=4,
             promotion_games=2,
             promotion_threshold=self.promotion_threshold,
+            adjudication_draw_margin=self.adjudication_draw_margin,
             temperature=self.temperature,
             temperature_drop_ply=self.temperature_drop_ply,
             seed=self.seed,
@@ -477,6 +479,7 @@ def run_candidate_arena(cfg: AutoTrainConfig, candidate_version: str, checkpoint
             seed=cfg.seed,
             promotion_threshold=cfg.promotion_threshold,
             ruleset_id=cfg.ruleset_id,
+            adjudication_draw_margin=cfg.adjudication_draw_margin,
         ),
         progress_callback=progress_callback,
     )
@@ -669,6 +672,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--channels", type=int, default=64)
     parser.add_argument("--promotionGames", type=int, default=20)
     parser.add_argument("--threshold", type=float, default=0.55)
+    parser.add_argument("--adjudicationDrawMargin", type=float, default=0.0)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--temperatureDropPly", type=int, default=20)
     parser.add_argument("--seed", type=int, default=1)
@@ -705,6 +709,7 @@ def config_from_args(args: argparse.Namespace) -> AutoTrainConfig:
         channels=args.channels,
         promotion_games=args.promotionGames,
         promotion_threshold=args.threshold,
+        adjudication_draw_margin=args.adjudicationDrawMargin,
         temperature=args.temperature,
         temperature_drop_ply=args.temperatureDropPly,
         seed=args.seed,

@@ -37,6 +37,7 @@ export interface StartAutoTrainRequest {
   batchSize?: number;
   promotionGames?: number;
   threshold?: number;
+  adjudicationDrawMargin?: number;
   ruleset?: 'kakao-like' | 'oetongsu-basic' | 'kja-like';
   selfplayWorkers?: number;
   parallelSelfPlay?: boolean;
@@ -176,6 +177,15 @@ export interface ArenaResultSummary {
   maxPliesReachedRate?: number | null;
   choWinRate?: number | null;
   hanWinRate?: number | null;
+  pairedSummary?: {
+    pairs?: number;
+    sideDominatedPairs?: number;
+    candidateDominatedPairs?: number;
+    championDominatedPairs?: number;
+    splitPairs?: number;
+    drawPairs?: number;
+    warnings?: string[];
+  } | null;
   modifiedAt?: string;
 }
 

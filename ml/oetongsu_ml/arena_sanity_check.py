@@ -13,6 +13,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--games", type=int, default=None)
     parser.add_argument("--simulations", type=int, default=None)
     parser.add_argument("--maxPlies", type=int, default=None)
+    parser.add_argument("--adjudicationDrawMargin", type=float, default=0.0)
     parser.add_argument("--ruleset", default="kakao-like", choices=["oetongsu-basic", "kakao-like", "kja-like"])
     parser.add_argument("--checkpointDir", default="../data/models/checkpoints")
     return parser.parse_args(argv)
@@ -26,6 +27,7 @@ def config_from_args(args: argparse.Namespace) -> ModelArenaConfig:
         temperature=0.0,
         ruleset_id=args.ruleset,
         promotion_threshold=0.55,
+        adjudication_draw_margin=args.adjudicationDrawMargin,
     )
 
 

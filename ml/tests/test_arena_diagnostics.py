@@ -31,6 +31,15 @@ def cho_biased_fixture():
         "illegalMoves": 0,
         "forfeits": 0,
         "gameSummaries": summaries,
+        "pairedSummary": {
+            "pairs": 20,
+            "sideDominatedPairs": 20,
+            "candidateDominatedPairs": 0,
+            "championDominatedPairs": 0,
+            "splitPairs": 20,
+            "drawPairs": 0,
+            "warnings": ["모든 pair가 같은 진영 승리로 갈렸습니다."],
+        },
     }
 
 
@@ -65,3 +74,4 @@ def test_render_includes_expected_summary_lines():
     assert "파일: az_iter_000002_arena.json" in rendered
     assert "score_adjudication: 40 / 40, 100.0%" in rendered
     assert "CHO 승리: 40 / 40, 100.0%" in rendered
+    assert "sideDominatedPairs: 20" in rendered

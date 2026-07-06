@@ -22,6 +22,7 @@ class ModelArenaConfig:
     seed: int = 1
     promotion_threshold: float = 0.55
     ruleset_id: RulesetId = "kakao-like"
+    adjudication_draw_margin: float = 0.0
 
 
 @dataclass
@@ -37,6 +38,7 @@ class ModelArenaResult:
     illegalMoves: int
     forfeits: int
     gameSummaries: list[dict[str, Any]]
+    pairedSummary: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -138,7 +140,62 @@ def run_model_arena(
         illegalMoves=illegal_moves,
         forfeits=forfeits,
         gameSummaries=summaries,
+        pairedSummary=build_paired_summary(summaries),
     )
+
+
+def build_paired_summary(summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    pairs = 0
+    side_dominated = 0
+    candidate_dominated = 0
+    champion_dominated = 0
+    split_pairs = 0
+    draw_pairs = 0
+
+    for index in range(0, len(summaries) - 1, 2):
+        first = summaries[index]
+        second = summaries[index + 1]
+        pairs += 1
+        winners = [first.get("winner"), second.get("winner")]
+        candidate_results = [winner_for_role(first, "candidate"), winner_for_role(second, "candidate")]
+        champion_results = [winner_for_role(first, "champion"), winner_for_role(second, "champion")]
+
+        if all(winner is None for winner in winners):
+            draw_pairs += 1
+        if winners[0] is not None and winners[0] == winners[1]:
+            side_dominated += 1
+        if all(candidate_results):
+            candidate_dominated += 1
+        if all(champion_results):
+            champion_dominated += 1
+        if candidate_results.count(True) == 1 and champion_results.count(True) == 1:
+            split_pairs += 1
+
+    warnings: list[str] = []
+    if pairs > 0 and side_dominated == pairs:
+        warnings.append("모든 pair가 같은 진영 승리로 갈렸습니다.")
+    elif pairs > 0 and side_dominated / pairs >= 0.9:
+        warnings.append("대부분의 pair가 같은 진영 승리로 갈렸습니다.")
+    if pairs > 0 and candidate_dominated == 0 and champion_dominated == 0 and side_dominated / pairs >= 0.9:
+        warnings.append("후보/챔피언 강도보다 진영 우세가 pair 결과를 지배할 수 있습니다.")
+
+    return {
+        "pairs": pairs,
+        "sideDominatedPairs": side_dominated,
+        "candidateDominatedPairs": candidate_dominated,
+        "championDominatedPairs": champion_dominated,
+        "splitPairs": split_pairs,
+        "drawPairs": draw_pairs,
+        "warnings": warnings,
+    }
+
+
+def winner_for_role(summary: dict[str, Any], role: str) -> bool:
+    winner = summary.get("winner")
+    if winner is None:
+        return False
+    side_key = "candidateSide" if role == "candidate" else "championSide"
+    return winner == summary.get(side_key)
 
 
 def play_arena_game(
@@ -185,9 +242,15 @@ def play_arena_game(
     else:
         if ruleset.max_ply_policy == "score-adjudication":
             score = score_board_material(position.board)
-            winner = score["winner"] if score["winner"] in ("CHO", "HAN") else None
+            scored_winner = score["winner"] if score["winner"] in ("CHO", "HAN") else None
+            margin = float(score.get("margin") or 0.0)
+            winner = scored_winner
             final_score = score
-            outcome = "score_adjudication" if winner is not None else "draw_max_plies"
+            if scored_winner is not None and margin <= config.adjudication_draw_margin:
+                winner = None
+                outcome = "draw_score_adjudication"
+            else:
+                outcome = "score_adjudication" if winner is not None else "draw_max_plies"
         else:
             outcome = "draw_max_plies"
         ply = config.max_plies - 1
@@ -205,4 +268,5 @@ def play_arena_game(
     }
     if final_score is not None:
         summary["finalScore"] = final_score
+        summary["adjudicationDrawMargin"] = config.adjudication_draw_margin
     return summary

@@ -34,6 +34,7 @@ class StartAutoTrainRequest(BaseModel):
     batchSize: Optional[int] = None
     promotionGames: Optional[int] = None
     threshold: Optional[float] = None
+    adjudicationDrawMargin: Optional[float] = None
     ruleset: Optional[Literal["kakao-like", "oetongsu-basic", "kja-like"]] = None
     selfplayWorkers: Optional[int] = None
     parallelSelfPlay: bool = False
@@ -188,6 +189,7 @@ class TrainingServerController:
                         "hanWinRate": (
                             diagnostics.winner_counts.get("HAN", 0) / diagnostics.games if diagnostics and diagnostics.games else None
                         ),
+                        "pairedSummary": payload.get("pairedSummary"),
                         "modifiedAt": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
                     }
                 )
@@ -214,6 +216,7 @@ class TrainingServerController:
             ("--batchSize", request.batchSize),
             ("--promotionGames", request.promotionGames),
             ("--threshold", request.threshold),
+            ("--adjudicationDrawMargin", request.adjudicationDrawMargin),
             ("--ruleset", request.ruleset),
             ("--selfplayWorkers", selfplay_workers_for(request)),
         ]
