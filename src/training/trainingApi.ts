@@ -6,6 +6,7 @@ import type {
   StopAutoTrainResponse,
   TrainingHealth,
   TrainingLogsResponse,
+  TrainingProgressResponse,
   TrainingStatus,
   TrainingSummaryResponse
 } from './types';
@@ -42,6 +43,10 @@ export function getTrainingLogs(limit = 50): Promise<TrainingLogsResponse> {
 
 export function getTrainingSummary(): Promise<TrainingSummaryResponse> {
   return getJson<TrainingSummaryResponse>('/api/training/summary');
+}
+
+export function getTrainingProgress(): Promise<TrainingProgressResponse> {
+  return getJson<TrainingProgressResponse>('/api/training/progress');
 }
 
 export function getArenaResults(): Promise<ArenaResultsResponse> {

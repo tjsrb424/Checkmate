@@ -11,8 +11,9 @@ from uuid import uuid4
 from .inference import RandomPolicyValueModel, TorchAlphaZeroModel
 from .model_arena import ModelArenaConfig, RandomModelPlayer, TorchModelPlayer, run_model_arena
 from .model_registry import get_latest_promoted, load_registry, promote_candidate, register_candidate, reject_candidate, save_registry
-from .parallel_self_play import ParallelSelfPlayConfig, run_parallel_self_play
+from .parallel_self_play import ParallelSelfPlayConfig, run_parallel_self_play_with_progress
 from .performance import SelfPlayPerformanceStats, aggregate_self_play_performance
+from .progress_reporter import ProgressReporter, clamp_percent
 from .ruleset import RulesetId
 from .self_play import SelfPlayConfig, play_self_play_game, self_play_samples_to_jsonl
 from .train_alphazero import train_alphazero
@@ -51,6 +52,8 @@ class AutoTrainConfig:
     strict: bool = False
     selfplay_workers: int = 1
     parallel_selfplay: bool = False
+    progress_path: str = "../data/training/progress.json"
+    progress_events_path: str = "../data/training/progress_events.jsonl"
 
     def resolved(self) -> "AutoTrainConfig":
         if not self.quick:
@@ -85,6 +88,8 @@ class AutoTrainConfig:
             strict=self.strict,
             selfplay_workers=self.selfplay_workers,
             parallel_selfplay=self.parallel_selfplay,
+            progress_path=self.progress_path,
+            progress_events_path=self.progress_events_path,
         )
 
 
@@ -143,11 +148,22 @@ def run_autotrain(config: AutoTrainConfig | None = None) -> AutoTrainRunResult:
     state_path = training_dir / "autotrain_state.json"
     log_path = training_dir / "autotrain_log.jsonl"
     summary_path = training_dir / "autotrain_summary.json"
+    progress_path = resolved_progress_path(cfg.progress_path, cfg.training_dir, "progress.json")
+    progress_events_path = resolved_progress_path(cfg.progress_events_path, cfg.training_dir, "progress_events.jsonl")
 
     state = load_autotrain_state(state_path) if cfg.resume and state_path.exists() else create_initial_state(cfg)
     state.status = "running"
     state.updatedAt = utc_now()
     save_autotrain_state(state_path, state)
+    reporter = ProgressReporter(progress_path, progress_events_path, state.runId, cfg.iterations)
+    reporter.update(
+        phase="selfplay",
+        phase_percent=0,
+        message="AutoTrain started",
+        message_ko="AutoTrain을 시작했습니다.",
+        current_iteration=max(1, state.currentIteration or 1),
+        completed_iterations=state.completedIterations,
+    )
 
     completed: list[AutoTrainIterationResult] = []
     try:
@@ -158,7 +174,7 @@ def run_autotrain(config: AutoTrainConfig | None = None) -> AutoTrainRunResult:
             state.updatedAt = utc_now()
             save_autotrain_state(state_path, state)
 
-            result = run_autotrain_iteration(cfg, registry, iteration)
+            result = run_autotrain_iteration(cfg, registry, iteration, reporter, state.completedIterations)
             completed.append(result)
             append_iteration_log(log_path, result)
 
@@ -170,6 +186,26 @@ def run_autotrain(config: AutoTrainConfig | None = None) -> AutoTrainRunResult:
             state.lastArenaResultPath = result.arenaResultPath
             state.updatedAt = utc_now()
             save_autotrain_state(state_path, state)
+            previous_progress = reporter.last_snapshot
+            reporter.update(
+                phase="package",
+                phase_percent=100,
+                message="Iteration result saved",
+                message_ko="학습 회차 결과를 저장했습니다.",
+                current_iteration=iteration,
+                completed_iterations=state.completedIterations,
+                self_play=previous_progress.selfPlay if previous_progress else {},
+                training=previous_progress.training if previous_progress else {},
+                arena=previous_progress.arena if previous_progress else {},
+                models={
+                    **(previous_progress.models if previous_progress else {}),
+                    "championVersion": result.championVersion,
+                    "candidateVersion": result.candidateVersion,
+                    "latestPromotedVersion": state.latestChampionVersion,
+                },
+                result={"promoted": result.promoted, "status": result.status},
+                progress_accuracy="iteration_complete",
+            )
 
             if cfg.strict and result.metrics.get("arena", {}).get("illegalMoves", 0) + result.metrics.get("arena", {}).get("forfeits", 0) > 0:
                 raise RuntimeError("strict autotrain stopped after illegal moves or forfeits")
@@ -180,24 +216,79 @@ def run_autotrain(config: AutoTrainConfig | None = None) -> AutoTrainRunResult:
         run_result = create_run_result(state, completed, log_path, summary_path)
         write_summary(summary_path, run_result)
         write_markdown_summary(training_dir / "autotrain_summary.md", run_result)
+        previous_progress = reporter.last_snapshot
+        reporter.update(
+            status="completed",
+            phase="completed",
+            phase_percent=100,
+            message="AutoTrain completed",
+            message_ko="AutoTrain이 완료되었습니다.",
+            current_iteration=max(1, state.currentIteration),
+            completed_iterations=state.completedIterations,
+            self_play=previous_progress.selfPlay if previous_progress else {},
+            training=previous_progress.training if previous_progress else {},
+            arena=previous_progress.arena if previous_progress else {},
+            models={
+                **(previous_progress.models if previous_progress else {}),
+                "latestPromotedVersion": state.latestChampionVersion,
+            },
+            result={"status": "completed"},
+            progress_accuracy="terminal_status",
+        )
         return run_result
-    except BaseException:
+    except BaseException as error:
         state.status = "failed"
         state.updatedAt = utc_now()
         save_autotrain_state(state_path, state)
+        reporter.mark_failed(error, max(1, state.currentIteration or 1), state.completedIterations)
         raise
 
 
-def run_autotrain_iteration(cfg: AutoTrainConfig, registry: dict[str, Any], iteration: int) -> AutoTrainIterationResult:
+def run_autotrain_iteration(
+    cfg: AutoTrainConfig,
+    registry: dict[str, Any],
+    iteration: int,
+    reporter: ProgressReporter | None = None,
+    completed_iterations: int = 0,
+) -> AutoTrainIterationResult:
     started_at = utc_now()
-    candidate_version = f"az_iter_{iteration:06d}"
     champion_entry = get_latest_promoted(registry)
     champion_path = cfg.initial_champion or (champion_entry.get("path") if champion_entry else None)
     champion_version = champion_entry.get("version") if champion_entry else ("initial_champion" if cfg.initial_champion else None)
     if champion_path is None and not cfg.allow_random_champion:
         raise RuntimeError("no promoted champion found; pass --allowRandomChampion, --quick, or --initialChampion")
+    candidate_version = f"az_iter_{iteration:06d}"
+    models = {
+        "championVersion": champion_version,
+        "candidateVersion": candidate_version,
+        "latestPromotedVersion": champion_version,
+    }
+    if reporter:
+        reporter.update(
+            phase="selfplay",
+            phase_percent=0,
+            message="Generating self-play games",
+            message_ko="후보 AI가 배울 자기대국을 생성하는 중입니다.",
+            current_iteration=iteration,
+            completed_iterations=completed_iterations,
+            self_play={
+                "currentGames": 0,
+                "totalGames": cfg.games_per_iteration,
+                "currentSamples": 0,
+                "workers": max(1, cfg.selfplay_workers),
+                "mode": "parallel" if cfg.parallel_selfplay or cfg.selfplay_workers > 1 else "sequential",
+            },
+            training={"currentEpoch": 0, "totalEpochs": cfg.train_epochs, "currentBatch": 0, "totalBatches": 0},
+            arena={"currentGames": 0, "totalGames": cfg.promotion_games, "illegalMoves": 0, "forfeits": 0},
+            models=models,
+        )
 
-    selfplay_path, selfplay_summary_path, sample_count, selfplay_metrics = generate_self_play(cfg, iteration, champion_path)
+    selfplay_path, selfplay_summary_path, sample_count, selfplay_metrics = generate_self_play(
+        cfg,
+        iteration,
+        champion_path,
+        progress_callback=selfplay_progress_callback(reporter, cfg, iteration, completed_iterations, models),
+    )
     checkpoint_path = Path(cfg.model_dir) / "checkpoints" / f"{candidate_version}.pt"
     resume_path = champion_path if cfg.resume_champion and champion_path else None
     train_metrics = train_alphazero(
@@ -209,6 +300,7 @@ def run_autotrain_iteration(cfg: AutoTrainConfig, registry: dict[str, Any], iter
         seed=cfg.seed + iteration,
         channels=cfg.channels,
         resume=resume_path,
+        progress_callback=training_progress_callback(reporter, cfg, iteration, completed_iterations, models),
     )
     metadata_path = checkpoint_path.with_name(f"{checkpoint_path.stem}_metrics.json")
 
@@ -222,7 +314,13 @@ def run_autotrain_iteration(cfg: AutoTrainConfig, registry: dict[str, Any], iter
     )
 
     arena_result_path = Path(cfg.arena_dir) / f"{candidate_version}_arena.json"
-    arena_result = run_candidate_arena(cfg, candidate_version, checkpoint_path, champion_path)
+    arena_result = run_candidate_arena(
+        cfg,
+        candidate_version,
+        checkpoint_path,
+        champion_path,
+        progress_callback=arena_progress_callback(reporter, cfg, iteration, completed_iterations, models),
+    )
     arena_json = arena_result.to_json()
     arena_result_path.parent.mkdir(parents=True, exist_ok=True)
     arena_result_path.write_text(json.dumps(arena_json, indent=2), encoding="utf-8")
@@ -256,11 +354,16 @@ def run_autotrain_iteration(cfg: AutoTrainConfig, registry: dict[str, Any], iter
     )
 
 
-def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str | None) -> tuple[Path, Path, int, dict[str, Any]]:
+def generate_self_play(
+    cfg: AutoTrainConfig,
+    iteration: int,
+    champion_path: str | None,
+    progress_callback=None,
+) -> tuple[Path, Path, int, dict[str, Any]]:
     selfplay_path = Path(cfg.selfplay_dir) / f"az_iter_{iteration:06d}.jsonl"
     summary_path = Path(cfg.selfplay_dir) / f"az_iter_{iteration:06d}_summary.json"
     if cfg.parallel_selfplay or cfg.selfplay_workers > 1:
-        result = run_parallel_self_play(
+        result = run_parallel_self_play_with_progress(
             ParallelSelfPlayConfig(
                 games=cfg.games_per_iteration,
                 workers=max(1, cfg.selfplay_workers),
@@ -275,7 +378,8 @@ def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str 
                 shard_dir=cfg.shard_dir,
                 model_checkpoint=champion_path,
                 random_model=champion_path is None,
-            )
+            ),
+            progress_callback=progress_callback,
         )
         return selfplay_path, summary_path, result.sample_count, {
             "mode": "parallel",
@@ -314,6 +418,16 @@ def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str 
         summaries.append(result.to_summary())
         if result.performance is not None:
             performances.append(result.performance)
+        if progress_callback:
+            progress_callback(
+                {
+                    "currentGames": game_index + 1,
+                    "totalGames": cfg.games_per_iteration,
+                    "currentSamples": len(all_samples),
+                    "workers": 1,
+                    "mode": "sequential",
+                }
+            )
 
     selfplay_path.parent.mkdir(parents=True, exist_ok=True)
     selfplay_path.write_text(self_play_samples_to_jsonl(all_samples), encoding="utf-8")
@@ -343,7 +457,7 @@ def generate_self_play(cfg: AutoTrainConfig, iteration: int, champion_path: str 
     }
 
 
-def run_candidate_arena(cfg: AutoTrainConfig, candidate_version: str, checkpoint_path: Path, champion_path: str | None):
+def run_candidate_arena(cfg: AutoTrainConfig, candidate_version: str, checkpoint_path: Path, champion_path: str | None, progress_callback=None):
     candidate = TorchModelPlayer(checkpoint_path, name=candidate_version)
     champion = TorchModelPlayer(champion_path, name="champion") if champion_path else RandomModelPlayer(name="champion", seed=cfg.seed + 99)
     return run_model_arena(
@@ -358,7 +472,98 @@ def run_candidate_arena(cfg: AutoTrainConfig, candidate_version: str, checkpoint
             promotion_threshold=cfg.promotion_threshold,
             ruleset_id=cfg.ruleset_id,
         ),
+        progress_callback=progress_callback,
     )
+
+
+def selfplay_progress_callback(
+    reporter: ProgressReporter | None,
+    cfg: AutoTrainConfig,
+    iteration: int,
+    completed_iterations: int,
+    models: dict[str, Any],
+):
+    if reporter is None:
+        return None
+
+    def callback(payload: dict[str, Any]) -> None:
+        current = int(payload.get("currentGames") or 0)
+        total = max(1, int(payload.get("totalGames") or cfg.games_per_iteration))
+        reporter.update(
+            phase="selfplay",
+            phase_percent=clamp_percent(current / total * 100),
+            message="Generating self-play games",
+            message_ko="후보 AI가 배울 자기대국을 생성하는 중입니다.",
+            current_iteration=iteration,
+            completed_iterations=completed_iterations,
+            self_play=payload,
+            training={"currentEpoch": 0, "totalEpochs": cfg.train_epochs, "currentBatch": 0, "totalBatches": 0},
+            arena={"currentGames": 0, "totalGames": cfg.promotion_games, "illegalMoves": 0, "forfeits": 0},
+            models=models,
+        )
+
+    return callback
+
+
+def training_progress_callback(
+    reporter: ProgressReporter | None,
+    cfg: AutoTrainConfig,
+    iteration: int,
+    completed_iterations: int,
+    models: dict[str, Any],
+):
+    if reporter is None:
+        return None
+
+    def callback(payload: dict[str, Any]) -> None:
+        current_epoch = int(payload.get("currentEpoch") or 1)
+        total_epochs = max(1, int(payload.get("totalEpochs") or cfg.train_epochs))
+        current_batch = int(payload.get("currentBatch") or 0)
+        total_batches = max(1, int(payload.get("totalBatches") or 1))
+        phase = ((current_epoch - 1) + current_batch / total_batches) / total_epochs * 100
+        reporter.update(
+            phase="train",
+            phase_percent=clamp_percent(phase),
+            message="Training candidate model",
+            message_ko="후보 AI가 자기대국 데이터를 학습하는 중입니다.",
+            current_iteration=iteration,
+            completed_iterations=completed_iterations,
+            self_play={"currentGames": cfg.games_per_iteration, "totalGames": cfg.games_per_iteration},
+            training=payload,
+            arena={"currentGames": 0, "totalGames": cfg.promotion_games, "illegalMoves": 0, "forfeits": 0},
+            models=models,
+        )
+
+    return callback
+
+
+def arena_progress_callback(
+    reporter: ProgressReporter | None,
+    cfg: AutoTrainConfig,
+    iteration: int,
+    completed_iterations: int,
+    models: dict[str, Any],
+):
+    if reporter is None:
+        return None
+
+    def callback(payload: dict[str, Any]) -> None:
+        current = int(payload.get("currentGames") or 0)
+        total = max(1, int(payload.get("totalGames") or cfg.promotion_games))
+        reporter.update(
+            phase="arena",
+            phase_percent=clamp_percent(current / total * 100),
+            message="Running promotion arena",
+            message_ko="후보 AI와 현재 챔피언의 승격 대국을 진행하는 중입니다.",
+            current_iteration=iteration,
+            completed_iterations=completed_iterations,
+            self_play={"currentGames": cfg.games_per_iteration, "totalGames": cfg.games_per_iteration},
+            training={"currentEpoch": cfg.train_epochs, "totalEpochs": cfg.train_epochs},
+            arena=payload,
+            models=models,
+        )
+
+    return callback
 
 
 def load_autotrain_state(path: str | Path) -> AutoTrainState:
@@ -435,6 +640,12 @@ def ensure_directories(config: AutoTrainConfig) -> None:
         Path(path).mkdir(parents=True, exist_ok=True)
 
 
+def resolved_progress_path(configured_path: str, training_dir: str, filename: str) -> str:
+    if configured_path == f"../data/training/{filename}" and training_dir != "../data/training":
+        return str(Path(training_dir) / filename)
+    return configured_path
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -470,6 +681,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--selfplayWorkers", type=int, default=1)
     parser.add_argument("--parallelSelfPlay", action="store_true")
+    parser.add_argument("--progressPath", default="../data/training/progress.json")
+    parser.add_argument("--progressEventsPath", default="../data/training/progress_events.jsonl")
     return parser.parse_args(argv)
 
 
@@ -504,6 +717,8 @@ def config_from_args(args: argparse.Namespace) -> AutoTrainConfig:
         strict=args.strict,
         selfplay_workers=args.selfplayWorkers,
         parallel_selfplay=args.parallelSelfPlay,
+        progress_path=args.progressPath,
+        progress_events_path=args.progressEventsPath,
     )
 
 

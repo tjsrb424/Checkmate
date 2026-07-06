@@ -50,6 +50,40 @@ def test_registry_logs_and_arena_work_without_files(tmp_path):
     assert test_client.get("/api/arena/results").json()["results"] == []
 
 
+def test_progress_endpoint_reports_missing_file(tmp_path):
+    test_client, _ = client(tmp_path)
+
+    response = test_client.get("/api/training/progress")
+
+    assert response.status_code == 200
+    assert response.json() == {"progress": None, "exists": False}
+
+
+def test_progress_endpoint_reads_progress_json(tmp_path):
+    test_client, controller = client(tmp_path)
+    controller.training_dir.mkdir(parents=True)
+    (controller.training_dir / "progress.json").write_text('{"status":"running"}', encoding="utf-8")
+
+    payload = test_client.get("/api/training/progress").json()
+
+    assert payload["exists"] is True
+    assert payload["progress"]["status"] == "running"
+    assert payload["source"] == "progress.json"
+    assert "updatedAt" in payload
+
+
+def test_progress_endpoint_handles_invalid_json(tmp_path):
+    test_client, controller = client(tmp_path)
+    controller.training_dir.mkdir(parents=True)
+    (controller.training_dir / "progress.json").write_text("{", encoding="utf-8")
+
+    payload = test_client.get("/api/training/progress").json()
+
+    assert payload["exists"] is True
+    assert payload["progress"] is None
+    assert "Invalid progress JSON" in payload["error"]
+
+
 def test_start_endpoint_rejects_when_already_running(tmp_path):
     test_client, controller = client(tmp_path)
     controller.process = FakeRunningProcess()

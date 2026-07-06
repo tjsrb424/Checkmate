@@ -54,6 +54,13 @@ def test_quick_autotrain_completes_one_iteration(tmp_path):
     assert entry["status"] in {"promoted", "rejected"}
     assert entry["arenaResults"][0]["illegalMoves"] == 0
 
+    progress = json.loads((tmp_path / "training" / "progress.json").read_text(encoding="utf-8"))
+    assert progress["status"] == "completed"
+    assert progress["overallPercent"] == 100
+    assert progress["phaseLabelKo"]
+    assert progress["messageKo"]
+    assert (tmp_path / "training" / "progress_events.jsonl").exists()
+
 
 def test_autotrain_requires_champion_without_random_fallback(tmp_path):
     config = quick_config(tmp_path, allow_random_champion=False)

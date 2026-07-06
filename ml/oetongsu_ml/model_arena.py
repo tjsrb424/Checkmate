@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .inference import PolicyValueModel, RandomPolicyValueModel, TorchAlphaZeroModel
 from .mcts import MCTSConfig, run_mcts
@@ -73,7 +73,12 @@ class TorchModelPlayer(MCTSModelPlayer):
         super().__init__(TorchAlphaZeroModel(checkpoint), name=name)
 
 
-def run_model_arena(candidate: ModelPlayer, champion: ModelPlayer, config: ModelArenaConfig | None = None) -> ModelArenaResult:
+def run_model_arena(
+    candidate: ModelPlayer,
+    champion: ModelPlayer,
+    config: ModelArenaConfig | None = None,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> ModelArenaResult:
     cfg = config or ModelArenaConfig()
     candidate_wins = 0
     champion_wins = 0
@@ -98,6 +103,23 @@ def run_model_arena(candidate: ModelPlayer, champion: ModelPlayer, config: Model
             candidate_wins += 1
         else:
             champion_wins += 1
+        if progress_callback:
+            completed_games = game_index + 1
+            candidate_score = candidate_wins + draws * 0.5
+            champion_score = champion_wins + draws * 0.5
+            progress_callback(
+                {
+                    "currentGames": completed_games,
+                    "totalGames": cfg.games,
+                    "candidateWins": candidate_wins,
+                    "championWins": champion_wins,
+                    "draws": draws,
+                    "candidateScoreRate": candidate_score / completed_games if completed_games > 0 else 0.0,
+                    "championScoreRate": champion_score / completed_games if completed_games > 0 else 0.0,
+                    "illegalMoves": illegal_moves,
+                    "forfeits": forfeits,
+                }
+            )
 
     candidate_score = candidate_wins + draws * 0.5
     champion_score = champion_wins + draws * 0.5

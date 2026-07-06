@@ -6,7 +6,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 from uuid import uuid4
 
 from .inference import RandomPolicyValueModel, TorchAlphaZeroModel
@@ -87,6 +87,13 @@ def split_games(total_games: int, workers: int) -> list[int]:
 
 
 def run_parallel_self_play(config: ParallelSelfPlayConfig | None = None) -> ParallelSelfPlayResult:
+    return run_parallel_self_play_with_progress(config=config)
+
+
+def run_parallel_self_play_with_progress(
+    config: ParallelSelfPlayConfig | None = None,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> ParallelSelfPlayResult:
     cfg = config or ParallelSelfPlayConfig()
     run_start_ms = now_ms()
     game_counts = split_games(cfg.games, cfg.workers)
@@ -103,6 +110,7 @@ def run_parallel_self_play(config: ParallelSelfPlayConfig | None = None) -> Para
     errors: list[str] = []
     if len(game_counts) == 1:
         results.append(_run_worker(0, game_counts[0], run_id, cfg))
+        report_parallel_progress(progress_callback, results, cfg.games, len(game_counts))
     else:
         with ProcessPoolExecutor(max_workers=len(game_counts)) as executor:
             futures = {
@@ -113,6 +121,7 @@ def run_parallel_self_play(config: ParallelSelfPlayConfig | None = None) -> Para
                 worker_id = futures[future]
                 try:
                     results.append(future.result())
+                    report_parallel_progress(progress_callback, results, cfg.games, len(game_counts))
                 except BaseException as error:
                     errors.append(f"worker {worker_id}: {error}")
 
@@ -163,6 +172,28 @@ def run_parallel_self_play(config: ParallelSelfPlayConfig | None = None) -> Para
     )
     write_parallel_summary(summary_path, run_result)
     return run_result
+
+
+def report_parallel_progress(
+    progress_callback: Callable[[dict[str, Any]], None] | None,
+    results: list[WorkerSelfPlayResult],
+    total_games: int,
+    workers: int,
+) -> None:
+    if not progress_callback:
+        return
+    try:
+        progress_callback(
+            {
+                "currentGames": sum(result.games for result in results if result.status == "completed"),
+                "totalGames": total_games,
+                "currentSamples": sum(result.sample_count for result in results),
+                "workers": workers,
+                "mode": "parallel",
+            }
+        )
+    except BaseException:
+        return
 
 
 def _run_worker(worker_id: int, games: int, run_id: str, cfg: ParallelSelfPlayConfig) -> WorkerSelfPlayResult:

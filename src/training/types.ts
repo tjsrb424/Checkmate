@@ -96,6 +96,42 @@ export interface TrainingSummaryResponse extends TrainingApiEnvelope {
   summary?: AutoTrainSummary | null;
 }
 
+export interface TrainingProgressResponse extends TrainingApiEnvelope {
+  exists?: boolean;
+  progress?: TrainingProgress | null;
+  updatedAt?: string;
+  source?: string;
+}
+
+export interface TrainingProgress {
+  job?: string;
+  runId?: string | null;
+  status?: string;
+  statusLabelKo?: string;
+  phaseKey?: string;
+  phaseLabelKo?: string;
+  message?: string;
+  messageKo?: string;
+  overallPercent?: number;
+  phasePercent?: number;
+  elapsedSeconds?: number;
+  elapsedText?: string;
+  etaSeconds?: number | null;
+  etaText?: string | null;
+  iteration?: {
+    current?: number;
+    total?: number;
+    completed?: number;
+  };
+  selfPlay?: Record<string, unknown>;
+  training?: Record<string, unknown>;
+  arena?: Record<string, unknown>;
+  models?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  progressAccuracy?: string;
+  updatedAt?: string;
+}
+
 export interface AutoTrainSummary {
   runId?: string;
   iterations?: Array<{

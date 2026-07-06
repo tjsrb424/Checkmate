@@ -136,6 +136,28 @@ class TrainingServerController:
                 entries.append({"raw": line})
         return {"entries": entries}
 
+    def progress_response(self) -> dict[str, Any]:
+        primary = self.training_dir / "progress.json"
+        fallback = self.training_dir / "runpod_a1_progress.json"
+        path = primary if primary.exists() else fallback
+        if not path.exists():
+            return {"progress": None, "exists": False}
+        try:
+            progress = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            return {
+                "progress": None,
+                "exists": True,
+                "error": f"Invalid progress JSON: {error}",
+                "updatedAt": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
+            }
+        return {
+            "progress": progress,
+            "exists": True,
+            "updatedAt": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
+            "source": path.name,
+        }
+
     def arena_results(self) -> dict[str, Any]:
         results = []
         if self.arena_dir.exists():
@@ -157,7 +179,15 @@ class TrainingServerController:
         return {"results": results}
 
     def build_autotrain_command(self, request: StartAutoTrainRequest) -> list[str]:
-        command = [sys.executable, "-m", "oetongsu_ml.autotrain"]
+        command = [
+            sys.executable,
+            "-m",
+            "oetongsu_ml.autotrain",
+            "--progressPath",
+            "../data/training/progress.json",
+            "--progressEventsPath",
+            "../data/training/progress_events.jsonl",
+        ]
         if request.quick:
             command.append("--quick")
         option_map: list[tuple[str, Any]] = [
@@ -239,6 +269,10 @@ def create_app(controller: TrainingServerController | None = None) -> FastAPI:
     @app.get("/api/training/summary")
     def training_summary() -> dict[str, Any]:
         return {"summary": read_json_or_none(app.state.controller.training_dir / "autotrain_summary.json")}
+
+    @app.get("/api/training/progress")
+    def training_progress() -> dict[str, Any]:
+        return app.state.controller.progress_response()
 
     @app.get("/api/arena/results")
     def arena_results() -> dict[str, Any]:

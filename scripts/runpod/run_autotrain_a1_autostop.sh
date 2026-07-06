@@ -258,6 +258,8 @@ run_autotrain_a1() {
     --ruleset kakao-like \
     --selfplayWorkers 4 \
     --parallelSelfPlay \
+    --progressPath ../data/training/progress.json \
+    --progressEventsPath ../data/training/progress_events.jsonl \
     --strict 2>&1 | tee "$MAIN_LOG" &
 
   AUTOTRAIN_PID=$!
