@@ -38,7 +38,7 @@ def cho_biased_fixture():
             "championDominatedPairs": 0,
             "splitPairs": 20,
             "drawPairs": 0,
-            "warnings": ["모든 pair가 같은 진영 승리로 갈렸습니다."],
+            "warnings": ["side dominated"],
         },
     }
 
@@ -63,15 +63,23 @@ def test_detects_score_adjudication_and_max_plies_rates():
 def test_generates_bias_warnings():
     diagnostics = analyze_arena_payload(cho_biased_fixture())
 
-    assert any("점수 판정" in warning for warning in diagnostics.warnings)
+    assert any("score_adjudication" in warning for warning in diagnostics.warnings)
     assert any("CHO" in warning for warning in diagnostics.warnings)
-    assert any("모델 강도보다 진영/점수 판정 편향" in warning for warning in diagnostics.warnings)
+    assert any("side/scoring policy" in warning for warning in diagnostics.warnings)
 
 
 def test_render_includes_expected_summary_lines():
     rendered = render_diagnostics(analyze_arena_payload(cho_biased_fixture(), "az_iter_000002_arena.json"))
 
-    assert "파일: az_iter_000002_arena.json" in rendered
-    assert "score_adjudication: 40 / 40, 100.0%" in rendered
-    assert "CHO 승리: 40 / 40, 100.0%" in rendered
-    assert "sideDominatedPairs: 20" in rendered
+    assert "file: az_iter_000002_arena.json" in rendered
+    assert "- score_adjudication: 40 / 40, 100.0%" in rendered
+    assert "- CHO: 40 / 40, 100.0%" in rendered
+    assert "- sideDominatedPairs: 20" in rendered
+
+
+def test_margin_summary_counts_draw_margin_buckets():
+    diagnostics = analyze_arena_payload(cho_biased_fixture(), draw_margin=1.5)
+
+    assert diagnostics.margin_summary.count == 40
+    assert diagnostics.margin_summary.within_draw_margin == 40
+    assert diagnostics.margin_summary.outside_draw_margin == 0
