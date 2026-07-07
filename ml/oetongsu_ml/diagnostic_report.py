@@ -10,6 +10,10 @@ SECTION_ORDER = [
     "Model Output Comparison",
     "Self-play Dataset Quality",
     "Training Metrics",
+    "Pairwise Arena Compare",
+    "Policy/Value Sample Review",
+    "Ablation Retrain",
+    "Ablation Evaluation",
     "Suspected Causes",
     "Recommended Next Action",
 ]
