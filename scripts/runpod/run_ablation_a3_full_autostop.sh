@@ -307,7 +307,7 @@ run_ablation() {
     --batchSize "$ABLATION_BATCH_SIZE" \
     --epochs "$ABLATION_EPOCHS" \
     --lrs $ABLATION_LRS \
-    --seed 7
+    --seed 7 || return 1
 
   python -m oetongsu_ml.ablation_evaluate \
     --champion ../data/models/checkpoints/supervised_v0001.pt \
@@ -316,7 +316,7 @@ run_ablation() {
     --simulations "$EVAL_SIMULATIONS" \
     --maxPlies "$EVAL_MAX_PLIES" \
     --adjudicationDrawMargin "$EVAL_DRAW_MARGIN" \
-    --output ../data/training/ablation_a3/evaluation_summary.json
+    --output ../data/training/ablation_a3/evaluation_summary.json || return 1
 
   if [ "$RUN_PAIRWISE_COMPARE" = "true" ]; then
     python -m oetongsu_ml.arena_compare \
@@ -329,12 +329,12 @@ run_ablation() {
       --maxPlies "$EVAL_MAX_PLIES" \
       --adjudicationDrawMargin "$EVAL_DRAW_MARGIN" \
       --ruleset kakao-like \
-      --output ../data/training/arena_compare_supervised_vs_a3_full.json
+      --output ../data/training/arena_compare_supervised_vs_a3_full.json || return 1
   fi
 }
 
 run_ablation_with_timeout() {
-  timeout "$MAX_SECONDS" bash -c 'run_ablation' 2>&1 | tee "$ABLATION_LOG" &
+  timeout "$MAX_SECONDS" bash -c 'run_ablation' > >(tee -a "$ABLATION_LOG") 2>&1 &
   WORK_PID=$!
   monitor_progress "$WORK_PID" &
   MONITOR_PID=$!
