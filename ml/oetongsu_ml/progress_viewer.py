@@ -106,6 +106,19 @@ def promotion_need_text(arena: dict[str, Any], threshold: float = 0.55) -> str:
 
 
 def promotion_judgement(arena: dict[str, Any], threshold: float = 0.55) -> str:
+    current_games = int(arena.get("currentGames") or 0)
+    if current_games < 5:
+        return "Sample is still small; final promotion judgement should wait."
+    score_rate = arena.get("candidateScoreRate")
+    if not isinstance(score_rate, (int, float)):
+        return "Waiting for promotion arena results."
+    if score_rate < 0.10:
+        return "Current candidate AI is losing heavily."
+    if score_rate < 0.40:
+        return "Current candidate AI is far below the promotion baseline."
+    if score_rate < threshold:
+        return "Current candidate AI is below the promotion baseline."
+    return "Current candidate AI is at or above the promotion baseline; final status is decided after all promotion arena games finish."
     score_rate = arena.get("candidateScoreRate")
     if not isinstance(score_rate, (int, float)):
         return "승격 대국 결과를 기다리고 있습니다."

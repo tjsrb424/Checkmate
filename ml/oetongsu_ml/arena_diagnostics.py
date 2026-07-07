@@ -6,7 +6,21 @@ import json
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+from statistics import median
 from typing import Any
+
+from .diagnostic_report import DEFAULT_REPORT_PATH, upsert_section
+
+
+@dataclass
+class MarginSummary:
+    count: int = 0
+    minimum: float = 0.0
+    maximum: float = 0.0
+    average: float = 0.0
+    median: float = 0.0
+    within_draw_margin: int = 0
+    outside_draw_margin: int = 0
 
 
 @dataclass
@@ -26,21 +40,26 @@ class ArenaDiagnostics:
     max_plies_reached: int = 0
     inferred_max_plies: int = 0
     winner_counts: Counter[str] = field(default_factory=Counter)
+    candidate_side_results: dict[str, Counter[str]] = field(default_factory=lambda: {"CHO": Counter(), "HAN": Counter()})
     candidate_cho_games: int = 0
     candidate_cho_wins: int = 0
     candidate_han_games: int = 0
     candidate_han_wins: int = 0
+    margin_summary: MarginSummary = field(default_factory=MarginSummary)
     paired_summary: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="외통수 Arena 결과의 진영/점수 판정 편향을 진단합니다.")
+    parser = argparse.ArgumentParser(description="Diagnose Oetongsu arena result bias, margins, and paired summaries.")
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--path", help="단일 arena JSON 경로")
-    source.add_argument("--glob", help="여러 arena JSON 경로 glob")
-    parser.add_argument("--summary", default="../data/training/arena_diagnostics_summary.md", help="Markdown 요약 출력 경로")
-    parser.add_argument("--no-summary", action="store_true", help="Markdown 요약 파일을 쓰지 않습니다.")
+    source.add_argument("--path", help="single arena JSON path")
+    source.add_argument("--glob", help="arena JSON glob")
+    parser.add_argument("--draw-margin", type=float, default=1.5)
+    parser.add_argument("--summary", default="../data/training/arena_diagnostics_summary.md", help="Markdown summary output")
+    parser.add_argument("--report", default=str(DEFAULT_REPORT_PATH), help="A3 regression report output")
+    parser.add_argument("--no-summary", action="store_true")
+    parser.add_argument("--no-report", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -51,7 +70,7 @@ def load_arena_payload(path: Path) -> dict[str, Any]:
     return payload
 
 
-def analyze_arena_payload(payload: dict[str, Any], path: str = "-") -> ArenaDiagnostics:
+def analyze_arena_payload(payload: dict[str, Any], path: str = "-", draw_margin: float = 1.5) -> ArenaDiagnostics:
     summaries = payload.get("gameSummaries") if isinstance(payload.get("gameSummaries"), list) else []
     games = int(payload.get("games") or len(summaries) or 0)
     diagnostics = ArenaDiagnostics(
@@ -73,6 +92,7 @@ def analyze_arena_payload(payload: dict[str, Any], path: str = "-") -> ArenaDiag
 
     plies_values: list[int] = []
     explicit_max_values: list[int] = []
+    margins: list[float] = []
     for summary in summaries:
         if not isinstance(summary, dict):
             continue
@@ -88,21 +108,54 @@ def analyze_arena_payload(payload: dict[str, Any], path: str = "-") -> ArenaDiag
             explicit_max_values.append(int(summary["maxPlies"]))
 
         candidate_side = summary.get("candidateSide")
-        if candidate_side == "CHO":
-            diagnostics.candidate_cho_games += 1
-            if winner == "CHO":
-                diagnostics.candidate_cho_wins += 1
-        elif candidate_side == "HAN":
-            diagnostics.candidate_han_games += 1
-            if winner == "HAN":
-                diagnostics.candidate_han_wins += 1
+        if candidate_side in ("CHO", "HAN"):
+            result = result_for_candidate(candidate_side, winner)
+            diagnostics.candidate_side_results[candidate_side][result] += 1
+            if candidate_side == "CHO":
+                diagnostics.candidate_cho_games += 1
+                if result == "win":
+                    diagnostics.candidate_cho_wins += 1
+            else:
+                diagnostics.candidate_han_games += 1
+                if result == "win":
+                    diagnostics.candidate_han_wins += 1
+
+        final_score = summary.get("finalScore")
+        if isinstance(final_score, dict):
+            margin = final_score.get("margin")
+            if isinstance(margin, (int, float)):
+                margins.append(float(margin))
 
     diagnostics.inferred_max_plies = infer_max_plies(explicit_max_values, plies_values, diagnostics.average_plies)
     if diagnostics.inferred_max_plies > 0:
         diagnostics.max_plies_reached = sum(1 for plies in plies_values if plies >= diagnostics.inferred_max_plies)
-
+    diagnostics.margin_summary = summarize_margins(margins, draw_margin)
     diagnostics.warnings = build_warnings(diagnostics)
     return diagnostics
+
+
+def result_for_candidate(candidate_side: str, winner: Any) -> str:
+    if winner is None:
+        return "draw"
+    if winner == candidate_side:
+        return "win"
+    if winner in ("CHO", "HAN"):
+        return "loss"
+    return "unknown"
+
+
+def summarize_margins(margins: list[float], draw_margin: float = 1.5) -> MarginSummary:
+    if not margins:
+        return MarginSummary()
+    return MarginSummary(
+        count=len(margins),
+        minimum=min(margins),
+        maximum=max(margins),
+        average=sum(margins) / len(margins),
+        median=float(median(margins)),
+        within_draw_margin=sum(1 for value in margins if value <= draw_margin),
+        outside_draw_margin=sum(1 for value in margins if value > draw_margin),
+    )
 
 
 def infer_max_plies(explicit_max_values: list[int], plies_values: list[int], average_plies: float) -> int:
@@ -125,21 +178,23 @@ def build_warnings(diagnostics: ArenaDiagnostics) -> list[str]:
     han_win_rate = diagnostics.winner_counts.get("HAN", 0) / games
 
     if adjudication_rate >= 0.9:
-        warnings.append("모든 또는 대부분의 대국이 maxPlies에서 점수 판정으로 끝났습니다.")
+        warnings.append("most games ended by score_adjudication")
     if max_plies_rate >= 0.9:
-        warnings.append("대부분의 대국이 최대 수순에 도달했습니다.")
+        warnings.append("most games reached maxPlies")
     if cho_win_rate >= 0.9:
-        warnings.append("모든 또는 대부분의 승자가 CHO입니다.")
+        warnings.append("winner side is dominated by CHO")
     if han_win_rate >= 0.9:
-        warnings.append("모든 또는 대부분의 승자가 HAN입니다.")
+        warnings.append("winner side is dominated by HAN")
     if adjudication_rate >= 0.9 and diagnostics.illegal_moves == 0 and diagnostics.forfeits == 0:
-        warnings.append("불법 수와 기권이 없는데 결과가 점수 판정에 집중되어 있습니다.")
+        warnings.append("result is adjudication-heavy without illegal moves or forfeits")
     if (cho_win_rate >= 0.9 or han_win_rate >= 0.9) and adjudication_rate >= 0.9:
-        warnings.append("현재 승격 대국은 모델 강도보다 진영/점수 판정 편향에 지배될 수 있습니다.")
+        warnings.append("arena result may be dominated by side/scoring policy rather than model strength")
     pairs = int(diagnostics.paired_summary.get("pairs") or 0) if diagnostics.paired_summary else 0
     side_dominated = int(diagnostics.paired_summary.get("sideDominatedPairs") or 0) if diagnostics.paired_summary else 0
     if pairs > 0 and side_dominated / pairs >= 0.9:
-        warnings.append("pair 대부분이 같은 진영 승리로 갈려 후보 AI 강도 비교로 신뢰하기 어렵습니다.")
+        warnings.append("pairedSummary indicates side-dominated pairs")
+    if diagnostics.margin_summary.count and diagnostics.margin_summary.outside_draw_margin == diagnostics.margin_summary.count:
+        warnings.append("all final score margins are outside the draw margin")
     return warnings
 
 
@@ -155,107 +210,69 @@ def rate(value: float) -> str:
 
 def render_diagnostics(diagnostics: ArenaDiagnostics) -> str:
     games = diagnostics.games
+    margin = diagnostics.margin_summary
     lines = [
-        "외통수 Arena 진단",
+        "Oetongsu arena diagnostics",
         "",
-        f"파일: {Path(diagnostics.path).name}",
-        f"게임 수: {games}",
-        f"후보 승리: {diagnostics.candidate_wins}",
-        f"챔피언 승리: {diagnostics.champion_wins}",
-        f"무승부: {diagnostics.draws}",
-        f"후보 점수율: {rate(diagnostics.candidate_score_rate)}",
-        f"승격 여부: {'승격' if diagnostics.promoted else '미승격'}",
+        f"file: {Path(diagnostics.path).name}",
+        f"games: {games}",
+        f"candidateWins: {diagnostics.candidate_wins}",
+        f"championWins: {diagnostics.champion_wins}",
+        f"draws: {diagnostics.draws}",
+        f"candidateScoreRate: {rate(diagnostics.candidate_score_rate)}",
+        f"promoted: {diagnostics.promoted}",
         "",
-        "종료 유형",
+        "outcomeCounts:",
     ]
-    for outcome in (
-        "score_adjudication",
-        "draw_score_adjudication",
-        "checkmate",
-        "illegal_move",
-        "draw_max_plies",
-        "loss_no_legal_moves",
-        "draw_no_legal_moves",
-    ):
-        count = diagnostics.outcome_counts.get(outcome, 0)
-        lines.append(f"{outcome}: {count} / {games}, {percent(count, games)}")
+    for outcome, count in sorted(diagnostics.outcome_counts.items()):
+        lines.append(f"- {outcome}: {count} / {games}, {percent(count, games)}")
 
     lines.extend(
         [
             "",
-            "수순",
-            f"averagePlies: {diagnostics.average_plies:.1f}",
-            f"maxPlies 도달 비율: {diagnostics.max_plies_reached} / {games}, {percent(diagnostics.max_plies_reached, games)}",
+            "plies:",
+            f"- averagePlies: {diagnostics.average_plies:.1f}",
+            f"- inferredMaxPlies: {diagnostics.inferred_max_plies}",
+            f"- maxPliesReached: {diagnostics.max_plies_reached} / {games}, {percent(diagnostics.max_plies_reached, games)}",
             "",
-            "진영 편향",
-            f"CHO 승리: {diagnostics.winner_counts.get('CHO', 0)} / {games}, {percent(diagnostics.winner_counts.get('CHO', 0), games)}",
-            f"HAN 승리: {diagnostics.winner_counts.get('HAN', 0)} / {games}, {percent(diagnostics.winner_counts.get('HAN', 0), games)}",
-            (
-                "후보가 CHO일 때 후보 승리: "
-                f"{diagnostics.candidate_cho_wins} / {diagnostics.candidate_cho_games}, "
-                f"{percent(diagnostics.candidate_cho_wins, diagnostics.candidate_cho_games)}"
-            ),
-            (
-                "후보가 HAN일 때 후보 승리: "
-                f"{diagnostics.candidate_han_wins} / {diagnostics.candidate_han_games}, "
-                f"{percent(diagnostics.candidate_han_wins, diagnostics.candidate_han_games)}"
-            ),
+            "winnerSideCounts:",
+            f"- CHO: {diagnostics.winner_counts.get('CHO', 0)} / {games}, {percent(diagnostics.winner_counts.get('CHO', 0), games)}",
+            f"- HAN: {diagnostics.winner_counts.get('HAN', 0)} / {games}, {percent(diagnostics.winner_counts.get('HAN', 0), games)}",
             "",
-            "Pair 요약",
-            f"pairs: {diagnostics.paired_summary.get('pairs', '-') if diagnostics.paired_summary else '-'}",
-            (
-                "sideDominatedPairs: "
-                f"{diagnostics.paired_summary.get('sideDominatedPairs', '-') if diagnostics.paired_summary else '-'}"
-            ),
-            (
-                "candidateDominatedPairs: "
-                f"{diagnostics.paired_summary.get('candidateDominatedPairs', '-') if diagnostics.paired_summary else '-'}"
-            ),
-            (
-                "championDominatedPairs: "
-                f"{diagnostics.paired_summary.get('championDominatedPairs', '-') if diagnostics.paired_summary else '-'}"
-            ),
+            "candidateSideResults:",
+            f"- candidate as CHO: {dict(diagnostics.candidate_side_results['CHO'])}",
+            f"- candidate as HAN: {dict(diagnostics.candidate_side_results['HAN'])}",
             "",
-            "경고",
+            "finalScoreMargins:",
+            f"- count: {margin.count}",
+            f"- min/max/avg/median: {margin.minimum:.3f} / {margin.maximum:.3f} / {margin.average:.3f} / {margin.median:.3f}",
+            f"- margin <= draw margin: {margin.within_draw_margin}",
+            f"- margin > draw margin: {margin.outside_draw_margin}",
+            "",
+            "pairedSummary:",
         ]
     )
-    lines.extend([f"- {warning}" for warning in diagnostics.warnings] or ["- 특이 경고 없음"])
+    if diagnostics.paired_summary:
+        for key in ("pairs", "sideDominatedPairs", "candidateDominatedPairs", "championDominatedPairs", "splitPairs", "drawPairs"):
+            lines.append(f"- {key}: {diagnostics.paired_summary.get(key, '-')}")
+    else:
+        lines.append("- unavailable")
+    lines.extend(["", "warnings:"])
+    lines.extend([f"- {warning}" for warning in diagnostics.warnings] or ["- none"])
     return "\n".join(lines)
 
 
 def render_markdown(diagnostics_list: list[ArenaDiagnostics]) -> str:
-    lines = [
-        "# Arena Diagnostics Summary",
-        "",
-        "## A3 전 권장 검토",
-        "",
-        "- `maxPlies`를 100에서 150 또는 200으로 늘려 점수 판정 집중도를 낮출지 검토",
-        "- `promotionGames`는 최소 40 유지, 편향이 계속 보이면 증가 검토",
-        "- `score_adjudication` 판정식과 HAN 덤/보정값이 의도대로 작동하는지 점검",
-        "- maxPlies 도달 시 무승부 처리 또는 점수 차 margin 기준 도입 검토",
-        "- 후보 점수율이 선후/초한 advantage를 충분히 상쇄하는지 동일 모델 sanity check로 확인",
-        "",
-    ]
+    lines = ["# Arena Diagnostics Summary", ""]
     for diagnostics in diagnostics_list:
-        lines.extend(
-            [
-                f"## {Path(diagnostics.path).name}",
-                "",
-                f"- 게임 수: {diagnostics.games}",
-                f"- 후보 점수율: {rate(diagnostics.candidate_score_rate)}",
-                f"- score_adjudication: {diagnostics.outcome_counts.get('score_adjudication', 0)} / {diagnostics.games}",
-                f"- maxPlies 도달: {diagnostics.max_plies_reached} / {diagnostics.games}",
-                f"- CHO 승리: {diagnostics.winner_counts.get('CHO', 0)} / {diagnostics.games}",
-                f"- HAN 승리: {diagnostics.winner_counts.get('HAN', 0)} / {diagnostics.games}",
-                f"- side-dominated pairs: {diagnostics.paired_summary.get('sideDominatedPairs', '-') if diagnostics.paired_summary else '-'}",
-                "",
-                "### 경고",
-                "",
-            ]
-        )
-        lines.extend([f"- {warning}" for warning in diagnostics.warnings] or ["- 특이 경고 없음"])
-        lines.append("")
+        lines.extend([f"## {Path(diagnostics.path).name}", "", render_diagnostics(diagnostics), ""])
     return "\n".join(lines).rstrip() + "\n"
+
+
+def render_report_section(diagnostics_list: list[ArenaDiagnostics]) -> str:
+    if not diagnostics_list:
+        return "_No arena diagnostics available._"
+    return "\n\n".join(render_diagnostics(item) for item in diagnostics_list)
 
 
 def resolve_paths(args: argparse.Namespace) -> list[Path]:
@@ -268,22 +285,25 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     paths = resolve_paths(args)
     if not paths:
-        print("진단할 arena JSON 파일을 찾지 못했습니다.")
+        print("ERROR: no arena JSON files matched")
         return 1
 
     diagnostics_list = []
     for path in paths:
-        diagnostics = analyze_arena_payload(load_arena_payload(path), str(path))
+        diagnostics = analyze_arena_payload(load_arena_payload(path), str(path), draw_margin=args.draw_margin)
         diagnostics_list.append(diagnostics)
         print(render_diagnostics(diagnostics))
         if path != paths[-1]:
-            print("\n" + "━" * 40 + "\n")
+            print("\n" + "-" * 60 + "\n")
 
     if not args.no_summary:
         summary_path = Path(args.summary)
         summary_path.parent.mkdir(parents=True, exist_ok=True)
         summary_path.write_text(render_markdown(diagnostics_list), encoding="utf-8")
-        print(f"\nMarkdown 요약 저장: {summary_path}")
+        print(f"\nsummary written: {summary_path}")
+    if not args.no_report:
+        upsert_section(args.report, "Arena Result", render_report_section(diagnostics_list))
+        print(f"report updated: {args.report}")
     return 0
 
 

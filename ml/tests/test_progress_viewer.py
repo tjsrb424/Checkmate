@@ -1,6 +1,6 @@
 import json
 
-from oetongsu_ml.progress_viewer import format_kst, load_progress, promotion_need_text, run_once
+from oetongsu_ml.progress_viewer import format_kst, load_progress, promotion_judgement, promotion_need_text, run_once
 
 
 def test_format_kst_converts_utc_iso_time():
@@ -30,6 +30,14 @@ def test_run_once_prints_missing_file_message(tmp_path, capsys):
 
     assert status == 1
     assert "진행률 파일을 찾을 수 없습니다" in capsys.readouterr().out
+
+
+def test_promotion_judgement_uses_score_bands():
+    assert "Sample is still small" in promotion_judgement({"currentGames": 4, "candidateScoreRate": 0.0})
+    assert "losing heavily" in promotion_judgement({"currentGames": 5, "candidateScoreRate": 0.05})
+    assert "far below" in promotion_judgement({"currentGames": 5, "candidateScoreRate": 0.25})
+    assert "below the promotion baseline" in promotion_judgement({"currentGames": 5, "candidateScoreRate": 0.45})
+    assert "at or above" in promotion_judgement({"currentGames": 5, "candidateScoreRate": 0.55})
 
 
 def test_run_once_renders_progress_snapshot(tmp_path, capsys):
