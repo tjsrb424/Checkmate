@@ -20,10 +20,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--minScoreRate", type=float, default=0.25)
     parser.add_argument("--ruleset", choices=["oetongsu-basic", "kakao-like", "kja-like"], default="kakao-like")
     parser.add_argument("--output", default="../data/training/cheap_validation_gate.json")
+    parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument("--seed", type=int, default=1)
     return parser.parse_args(argv)
 
 
 def run_gate(args: argparse.Namespace) -> dict[str, Any]:
+    repeats = max(1, int(getattr(args, "repeats", 1)))
+    if repeats > 1:
+        return run_repeated_gate(args, repeats)
+    return run_single_gate(args, int(getattr(args, "seed", 1)))
+
+
+def run_single_gate(args: argparse.Namespace, seed: int) -> dict[str, Any]:
     candidate = require_checkpoint(args.candidate, "candidate")
     champion = require_checkpoint(args.champion, "champion")
     result = run_model_arena(
@@ -34,12 +43,13 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
             simulations=args.simulations,
             max_plies=args.maxPlies,
             temperature=0.0,
+            seed=seed,
             promotion_threshold=args.minScoreRate,
             ruleset_id=args.ruleset,
             adjudication_draw_margin=args.adjudicationDrawMargin,
         ),
     ).to_json()
-    return summarize_gate_result(
+    payload = summarize_gate_result(
         result,
         candidate=str(candidate),
         champion=str(champion),
@@ -48,6 +58,51 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         adjudication_draw_margin=args.adjudicationDrawMargin,
         min_score_rate=args.minScoreRate,
     )
+    payload["seed"] = seed
+    return payload
+
+
+def run_repeated_gate(args: argparse.Namespace, repeats: int) -> dict[str, Any]:
+    runs = [run_single_gate(args, int(args.seed) + index) for index in range(repeats)]
+    pass_count = sum(1 for row in runs if row["status"] == "pass")
+    fail_count = sum(1 for row in runs if row["status"] == "fail")
+    aggregate_score_rate = sum(float(row["candidateScoreRate"]) for row in runs) / len(runs)
+    status = "pass" if pass_count == repeats else "fail" if fail_count == repeats else "warn"
+    warnings: list[str] = []
+    if status == "warn":
+        warnings.append("repeated cheap validation produced mixed pass/fail results")
+    for row in runs:
+        for warning in row.get("warnings", []):
+            if warning not in warnings:
+                warnings.append(warning)
+    first = runs[0]
+    return {
+        "candidate": first["candidate"],
+        "champion": first["champion"],
+        "status": status,
+        "repeats": repeats,
+        "seed": int(args.seed),
+        "runs": [
+            {
+                "seed": row["seed"],
+                "candidateScoreRate": row["candidateScoreRate"],
+                "status": row["status"],
+                "warnings": row.get("warnings", []),
+            }
+            for row in runs
+        ],
+        "passCount": pass_count,
+        "failCount": fail_count,
+        "aggregateScoreRate": aggregate_score_rate,
+        "warnings": warnings,
+        "settings": {
+            "games": args.games,
+            "simulations": args.simulations,
+            "maxPlies": args.maxPlies,
+            "adjudicationDrawMargin": args.adjudicationDrawMargin,
+            "minScoreRate": args.minScoreRate,
+        },
+    }
 
 
 def summarize_gate_result(
@@ -125,10 +180,10 @@ def render_summary(payload: dict[str, Any]) -> str:
         [
             "Cheap validation gate",
             f"status: {payload['status']}",
-            f"candidateScoreRate: {payload['candidateScoreRate']:.3f}",
-            f"wins/losses/draws: {payload['candidateWins']}/{payload['championWins']}/{payload['draws']}",
-            f"illegalMoves: {payload['illegalMoves']}",
-            f"forfeits: {payload['forfeits']}",
+            f"candidateScoreRate: {float(payload.get('candidateScoreRate', payload.get('aggregateScoreRate', 0.0))):.3f}",
+            f"wins/losses/draws: {payload.get('candidateWins', '-')}/{payload.get('championWins', '-')}/{payload.get('draws', '-')}",
+            f"illegalMoves: {payload.get('illegalMoves', '-')}",
+            f"forfeits: {payload.get('forfeits', '-')}",
             f"warnings: {', '.join(payload['warnings']) if payload['warnings'] else '-'}",
         ]
     )

@@ -18,6 +18,7 @@ A RunPod job is allowed only when all of these are documented:
 
 - AutoTrain candidate-init guard tests pass.
 - A cheap validation gate result exists before any full promotion arena for disputed candidates.
+- The cheap validation gate must separate known failed and known stronger candidates, or the gate settings must be redesigned.
 - A seed sensitivity probe has been run or explicitly waived with rationale before A4.
 - A current path-diff report exists when AutoTrain and ablation results disagree.
 - Any AutoTrain/ablation path mismatch has a documented explanation or a code fix before A4.
@@ -49,6 +50,7 @@ A RunPod job is allowed only when all of these are documented:
 - Candidate does not improve over the failed baseline.
 - Candidate resume source cannot be proven to be the latest promoted champion.
 - Cheap validation gate is missing, failed, or side-dominated for a disputed candidate.
+- Cheap validation passes both a known failed candidate and a stronger ablation candidate under the same settings.
 - Seed sensitivity has not been checked before A4 after a seed/split-related discrepancy.
 - AutoTrain and ablation paths disagree and the difference has not been explained.
 - Arena pairs are side-dominated or all games reach max plies without useful separation.

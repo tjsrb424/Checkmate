@@ -124,3 +124,11 @@ Compared positions: 128
 - 새 self-play 생성: **금지**.
 - registry champion 변경: **금지**.
 - 허용: 이 path-diff report 기반의 코드 수정, 메타데이터 기록 보강, 작은 로컬/CPU-first 검증.
+## 12. Sprint 42 Local Validation Result
+
+- Seed sensitivity probe with limit `256` found a meaningful seed difference: seed `7` val_total_loss `5.567775` beat seed `4` val_total_loss `6.060398`.
+- Cheap validation with games `4`, simulations `8`, maxPlies `80` did not separate the failed A3 candidate from the ablation candidate.
+- `az_iter_000003` cheap gate result: `pass`, score rate `0.750`, warnings `all games reached maxPlies` and `score adjudication dominated the gate`.
+- `ablation_a3_lr_0_001` cheap gate result: `pass`, score rate `0.750`, with the same warnings.
+- This is inconsistent with full arena results where `az_iter_000003` scored `0.000` and ablation LR `0.001` scored `0.750`.
+- Decision update: keep full A4 blocked and redesign the cheap gate before relying on it as a stop/go signal.

@@ -1,4 +1,7 @@
-from oetongsu_ml.cheap_validation_gate import summarize_gate_result
+from argparse import Namespace
+
+from oetongsu_ml import cheap_validation_gate
+from oetongsu_ml.cheap_validation_gate import run_repeated_gate, summarize_gate_result
 
 
 def arena(score_rate, *, illegal=0, forfeits=0, side_dominated=0, pairs=2):
@@ -49,3 +52,21 @@ def test_cheap_validation_fails_side_dominated_pairs():
     payload = summarize(arena(0.5, side_dominated=2, pairs=2))
 
     assert payload["status"] == "fail"
+
+
+def test_repeated_gate_reports_mixed_warn(monkeypatch):
+    calls = iter(
+        [
+            {"candidate": "c.pt", "champion": "h.pt", "seed": 1, "candidateScoreRate": 0.5, "status": "pass", "warnings": []},
+            {"candidate": "c.pt", "champion": "h.pt", "seed": 2, "candidateScoreRate": 0.0, "status": "fail", "warnings": ["zero"]},
+            {"candidate": "c.pt", "champion": "h.pt", "seed": 3, "candidateScoreRate": 0.25, "status": "pass", "warnings": []},
+        ]
+    )
+    monkeypatch.setattr(cheap_validation_gate, "run_single_gate", lambda args, seed: next(calls))
+
+    payload = run_repeated_gate(Namespace(seed=1, games=4, simulations=8, maxPlies=80, adjudicationDrawMargin=1.5, minScoreRate=0.25), 3)
+
+    assert payload["status"] == "warn"
+    assert payload["passCount"] == 2
+    assert payload["failCount"] == 1
+    assert payload["aggregateScoreRate"] == 0.25
