@@ -53,6 +53,13 @@ def run_retrain(args: argparse.Namespace) -> list[dict]:
             seed=args.seed,
             channels=args.channels,
             resume=resume,
+            training_metadata={
+                "source": "ablation_retrain",
+                "model_version": output.stem,
+                "candidate_version": output.stem,
+                "champion_version": "supervised_v0001" if resume and resume.name == "supervised_v0001.pt" else None,
+                "resume_version": resume.stem if resume else None,
+            },
         )
         last = metrics["history"][-1] if metrics.get("history") else {}
         rows.append({"lr": lr, "checkpoint": str(output), "metricsPath": str(output.with_name(f"{output.stem}_metrics.json")), "last": last})

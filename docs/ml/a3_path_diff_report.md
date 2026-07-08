@@ -110,6 +110,15 @@ Compared positions: 128
 
 ## 10. RunPod Decision
 
+## 11. Sprint 41 Follow-up
+
+- Added an AutoTrain candidate-init guard so the candidate resume source resolves to the latest promoted champion, not the latest rejected candidate.
+- Added `training_metadata` to AlphaZero metrics JSON and checkpoints.
+- Added a cheap validation gate for optional pre-arena checks.
+- Added an optional AutoTrain cheap-validation hook, disabled by default unless `--cheapValidationBeforeArena` is set.
+- Added a seed sensitivity probe for local small-limit checks before any A4 or RunPod work.
+- RunPod A4 remains blocked until guard tests, metadata validation, cheap validation, and seed-sensitivity checks pass.
+
 - Full RunPod A4: **금지**.
 - AutoTrain 추가 실행: **금지**.
 - 새 self-play 생성: **금지**.

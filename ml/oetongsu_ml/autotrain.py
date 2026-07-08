@@ -10,12 +10,13 @@ from uuid import uuid4
 
 from .inference import RandomPolicyValueModel, TorchAlphaZeroModel
 from .model_arena import ModelArenaConfig, RandomModelPlayer, TorchModelPlayer, run_model_arena
-from .model_registry import get_latest_promoted, load_registry, promote_candidate, register_candidate, reject_candidate, save_registry
+from .model_registry import find_entry, get_latest_promoted, load_registry, promote_candidate, register_candidate, reject_candidate, save_registry
 from .parallel_self_play import ParallelSelfPlayConfig, run_parallel_self_play_with_progress
 from .performance import SelfPlayPerformanceStats, aggregate_self_play_performance
 from .progress_reporter import ProgressReporter, clamp_percent
 from .ruleset import RulesetId
 from .self_play import SelfPlayConfig, play_self_play_game, self_play_samples_to_jsonl
+from .cheap_validation_gate import summarize_gate_result
 from .train_alphazero import train_alphazero
 
 AutoTrainStatus = Literal["idle", "running", "completed", "failed"]
@@ -55,6 +56,12 @@ class AutoTrainConfig:
     parallel_selfplay: bool = False
     progress_path: str = "../data/training/progress.json"
     progress_events_path: str = "../data/training/progress_events.jsonl"
+    cheap_validation_before_arena: bool = False
+    cheap_validation_games: int = 4
+    cheap_validation_simulations: int = 8
+    cheap_validation_max_plies: int = 80
+    cheap_validation_min_score_rate: float = 0.25
+    cheap_validation_fail_fast: bool = False
 
     def resolved(self) -> "AutoTrainConfig":
         if not self.quick:
@@ -92,6 +99,12 @@ class AutoTrainConfig:
             parallel_selfplay=self.parallel_selfplay,
             progress_path=self.progress_path,
             progress_events_path=self.progress_events_path,
+            cheap_validation_before_arena=self.cheap_validation_before_arena,
+            cheap_validation_games=min(self.cheap_validation_games, 4),
+            cheap_validation_simulations=min(self.cheap_validation_simulations, 8),
+            cheap_validation_max_plies=min(self.cheap_validation_max_plies, 80),
+            cheap_validation_min_score_rate=self.cheap_validation_min_score_rate,
+            cheap_validation_fail_fast=self.cheap_validation_fail_fast,
         )
 
 
@@ -129,6 +142,7 @@ class AutoTrainIterationResult:
     promoted: bool
     status: Literal["promoted", "rejected"]
     metrics: dict[str, Any] = field(default_factory=dict)
+    cheapValidation: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -141,6 +155,17 @@ class AutoTrainRunResult:
     latestChampionVersion: str | None
     logPath: str
     summaryPath: str
+
+
+@dataclass
+class CandidateResumeResolution:
+    championVersion: str | None
+    championPath: str | None
+    resumePath: str | None
+    resumeCandidateFromChampion: bool
+    latestCandidateVersion: str | None = None
+    latestCandidateStatus: str | None = None
+    latestCandidatePath: str | None = None
 
 
 def run_autotrain(config: AutoTrainConfig | None = None) -> AutoTrainRunResult:
@@ -178,7 +203,15 @@ def run_autotrain(config: AutoTrainConfig | None = None) -> AutoTrainRunResult:
             state.updatedAt = utc_now()
             save_autotrain_state(state_path, state)
 
-            result = run_autotrain_iteration(cfg, registry, iteration, reporter, completed_before_current)
+            result = run_autotrain_iteration(
+                cfg,
+                registry,
+                iteration,
+                reporter,
+                completed_before_current,
+                latest_candidate_version=state.latestCandidateVersion,
+                run_id=state.runId,
+            )
             completed.append(result)
             append_iteration_log(log_path, result)
 
@@ -207,7 +240,7 @@ def run_autotrain(config: AutoTrainConfig | None = None) -> AutoTrainRunResult:
                     "latestPromotedVersion": state.latestChampionVersion,
                     "promotionThreshold": cfg.promotion_threshold,
                 },
-                result={"promoted": result.promoted, "status": result.status},
+                result={"promoted": result.promoted, "status": result.status, "cheapValidation": result.cheapValidation},
                 progress_accuracy="iteration_complete",
             )
             state.completedIterations = iteration
@@ -257,11 +290,13 @@ def run_autotrain_iteration(
     iteration: int,
     reporter: ProgressReporter | None = None,
     completed_iterations: int = 0,
+    latest_candidate_version: str | None = None,
+    run_id: str | None = None,
 ) -> AutoTrainIterationResult:
     started_at = utc_now()
-    champion_entry = get_latest_promoted(registry)
-    champion_path = cfg.initial_champion or (champion_entry.get("path") if champion_entry else None)
-    champion_version = champion_entry.get("version") if champion_entry else ("initial_champion" if cfg.initial_champion else None)
+    resume_resolution = resolve_candidate_resume_checkpoint(cfg, registry, latest_candidate_version)
+    champion_path = resume_resolution.championPath
+    champion_version = resume_resolution.championVersion
     if champion_path is None and not cfg.allow_random_champion:
         raise RuntimeError("no promoted champion found; pass --allowRandomChampion, --quick, or --initialChampion")
     candidate_version = f"az_iter_{iteration:06d}"
@@ -270,6 +305,11 @@ def run_autotrain_iteration(
         "candidateVersion": candidate_version,
         "latestPromotedVersion": champion_version,
         "promotionThreshold": cfg.promotion_threshold,
+        "resumeSourceVersion": resume_resolution.championVersion,
+        "resumeSourcePath": resume_resolution.resumePath,
+        "resumeCandidateFromChampion": resume_resolution.resumeCandidateFromChampion,
+        "latestCandidateVersion": resume_resolution.latestCandidateVersion,
+        "latestCandidateStatus": resume_resolution.latestCandidateStatus,
     }
     if reporter:
         reporter.update(
@@ -298,7 +338,7 @@ def run_autotrain_iteration(
         progress_callback=selfplay_progress_callback(reporter, cfg, iteration, completed_iterations, models),
     )
     checkpoint_path = Path(cfg.model_dir) / "checkpoints" / f"{candidate_version}.pt"
-    resume_path = champion_path if cfg.resume_champion and champion_path else None
+    resume_path = resume_resolution.resumePath
     train_metrics = train_alphazero(
         data=selfplay_path,
         output=checkpoint_path,
@@ -308,9 +348,22 @@ def run_autotrain_iteration(
         seed=cfg.seed + iteration,
         channels=cfg.channels,
         resume=resume_path,
+        training_metadata={
+            "source": "autotrain",
+            "run_id": run_id,
+            "model_version": candidate_version,
+            "candidate_version": candidate_version,
+            "champion_version": champion_version,
+            "resume_version": resume_resolution.championVersion,
+            "resumeCandidateFromChampion": resume_resolution.resumeCandidateFromChampion,
+            "latestCandidateVersion": resume_resolution.latestCandidateVersion,
+            "latestCandidateStatus": resume_resolution.latestCandidateStatus,
+        },
         progress_callback=training_progress_callback(reporter, cfg, iteration, completed_iterations, models),
     )
     metadata_path = checkpoint_path.with_name(f"{checkpoint_path.stem}_metrics.json")
+
+    cheap_validation = run_cheap_validation_if_enabled(cfg, candidate_version, checkpoint_path, champion_path, reporter, iteration, completed_iterations, models)
 
     register_candidate(
         registry,
@@ -318,22 +371,25 @@ def run_autotrain_iteration(
         path=str(checkpoint_path),
         metadata_path=str(metadata_path),
         parent_version=champion_version,
-        metrics={"train": latest_train_metrics(train_metrics), "sampleCount": sample_count, "selfPlay": selfplay_metrics},
+        metrics={"train": latest_train_metrics(train_metrics), "sampleCount": sample_count, "selfPlay": selfplay_metrics, "cheapValidation": cheap_validation},
     )
 
     arena_result_path = Path(cfg.arena_dir) / f"{candidate_version}_arena.json"
-    arena_result = run_candidate_arena(
-        cfg,
-        candidate_version,
-        checkpoint_path,
-        champion_path,
-        progress_callback=arena_progress_callback(reporter, cfg, iteration, completed_iterations, models),
-    )
-    arena_json = arena_result.to_json()
+    if cheap_validation.get("status") == "fail" and cfg.cheap_validation_fail_fast:
+        arena_json = cheap_validation_rejection_arena(cheap_validation)
+    else:
+        arena_result = run_candidate_arena(
+            cfg,
+            candidate_version,
+            checkpoint_path,
+            champion_path,
+            progress_callback=arena_progress_callback(reporter, cfg, iteration, completed_iterations, models, cheap_validation),
+        )
+        arena_json = arena_result.to_json()
     arena_result_path.parent.mkdir(parents=True, exist_ok=True)
     arena_result_path.write_text(json.dumps(arena_json, indent=2), encoding="utf-8")
 
-    if arena_result.promoted:
+    if bool(arena_json.get("promoted")):
         promote_candidate(registry, candidate_version, arena_json)
         status: Literal["promoted", "rejected"] = "promoted"
     else:
@@ -354,11 +410,12 @@ def run_autotrain_iteration(
         checkpointPath=str(checkpoint_path),
         metadataPath=str(metadata_path),
         arenaResultPath=str(arena_result_path),
-        candidateScoreRate=arena_result.candidateScoreRate,
-        championScoreRate=arena_result.championScoreRate,
-        promoted=arena_result.promoted,
+        candidateScoreRate=float(arena_json.get("candidateScoreRate") or 0.0),
+        championScoreRate=float(arena_json.get("championScoreRate") or 0.0),
+        promoted=bool(arena_json.get("promoted")),
         status=status,
-        metrics={"selfPlay": selfplay_metrics, "train": train_metrics, "arena": arena_json},
+        metrics={"selfPlay": selfplay_metrics, "train": train_metrics, "arena": arena_json, "cheapValidation": cheap_validation},
+        cheapValidation=cheap_validation,
     )
 
 
@@ -485,6 +542,129 @@ def run_candidate_arena(cfg: AutoTrainConfig, candidate_version: str, checkpoint
     )
 
 
+def resolve_candidate_resume_checkpoint(
+    cfg: AutoTrainConfig,
+    registry: dict[str, Any],
+    latest_candidate_version: str | None = None,
+) -> CandidateResumeResolution:
+    champion_entry = get_latest_promoted(registry)
+    champion_path = cfg.initial_champion or (champion_entry.get("path") if champion_entry else None)
+    champion_version = champion_entry.get("version") if champion_entry else ("initial_champion" if cfg.initial_champion else None)
+    latest_candidate = find_entry(registry, latest_candidate_version) if latest_candidate_version else None
+    latest_candidate_path = latest_candidate.get("path") if latest_candidate else None
+    latest_candidate_status = latest_candidate.get("status") if latest_candidate else None
+    resume_path = champion_path if cfg.resume_champion and champion_path else None
+    if (
+        resume_path
+        and latest_candidate
+        and latest_candidate_status != "promoted"
+        and latest_candidate_path
+        and Path(resume_path) == Path(latest_candidate_path)
+    ):
+        raise RuntimeError("candidate resume source resolved to a rejected/latest candidate checkpoint")
+    return CandidateResumeResolution(
+        championVersion=champion_version,
+        championPath=champion_path,
+        resumePath=resume_path,
+        resumeCandidateFromChampion=bool(resume_path and champion_path and Path(resume_path) == Path(champion_path)),
+        latestCandidateVersion=latest_candidate_version,
+        latestCandidateStatus=latest_candidate_status,
+        latestCandidatePath=latest_candidate_path,
+    )
+
+
+def run_cheap_validation_if_enabled(
+    cfg: AutoTrainConfig,
+    candidate_version: str,
+    checkpoint_path: Path,
+    champion_path: str | None,
+    reporter: ProgressReporter | None,
+    iteration: int,
+    completed_iterations: int,
+    models: dict[str, Any],
+) -> dict[str, Any]:
+    if not cfg.cheap_validation_before_arena:
+        return {"enabled": False, "status": "skipped", "warnings": []}
+    if champion_path is None:
+        return {"enabled": True, "status": "skipped", "warnings": ["no champion checkpoint for cheap validation"]}
+    result = run_model_arena(
+        TorchModelPlayer(checkpoint_path, name=candidate_version),
+        TorchModelPlayer(champion_path, name="champion"),
+        ModelArenaConfig(
+            games=cfg.cheap_validation_games,
+            simulations=cfg.cheap_validation_simulations,
+            max_plies=cfg.cheap_validation_max_plies,
+            temperature=0.0,
+            seed=cfg.seed,
+            promotion_threshold=cfg.cheap_validation_min_score_rate,
+            ruleset_id=cfg.ruleset_id,
+            adjudication_draw_margin=cfg.adjudication_draw_margin,
+        ),
+    ).to_json()
+    output_path = Path(cfg.training_dir) / f"{candidate_version}_cheap_validation.json"
+    payload = summarize_gate_result(
+        result,
+        candidate=str(checkpoint_path),
+        champion=str(champion_path),
+        simulations=cfg.cheap_validation_simulations,
+        max_plies=cfg.cheap_validation_max_plies,
+        adjudication_draw_margin=cfg.adjudication_draw_margin,
+        min_score_rate=cfg.cheap_validation_min_score_rate,
+    )
+    payload["enabled"] = True
+    payload["outputPath"] = str(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    if reporter:
+        reporter.update(
+            phase="arena",
+            phase_percent=5,
+            message="Cheap validation gate completed",
+            message_ko="Cheap validation gate媛 ?꾨즺?섏뿀?듬땲??",
+            current_iteration=iteration,
+            completed_iterations=completed_iterations,
+            self_play={"currentGames": cfg.games_per_iteration, "totalGames": cfg.games_per_iteration},
+            training={"currentEpoch": cfg.train_epochs, "totalEpochs": cfg.train_epochs},
+            arena={"cheapValidation": compact_cheap_validation(payload)},
+            models=models,
+            result={"cheapValidation": compact_cheap_validation(payload)},
+            progress_accuracy="cheap_validation_gate",
+        )
+    return payload
+
+
+def compact_cheap_validation(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "enabled": payload.get("enabled", False),
+        "status": payload.get("status", "skipped"),
+        "candidateScoreRate": payload.get("candidateScoreRate"),
+        "games": payload.get("games"),
+        "simulations": payload.get("simulations"),
+        "maxPlies": payload.get("maxPlies"),
+        "warnings": payload.get("warnings", []),
+        "outputPath": payload.get("outputPath"),
+    }
+
+
+def cheap_validation_rejection_arena(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "games": int(payload.get("games") or 0),
+        "candidateWins": int(payload.get("candidateWins") or 0),
+        "championWins": int(payload.get("championWins") or 0),
+        "draws": int(payload.get("draws") or 0),
+        "candidateScoreRate": float(payload.get("candidateScoreRate") or 0.0),
+        "championScoreRate": 1.0 - float(payload.get("candidateScoreRate") or 0.0),
+        "averagePlies": float(payload.get("averagePlies") or 0.0),
+        "promoted": False,
+        "illegalMoves": int(payload.get("illegalMoves") or 0),
+        "forfeits": int(payload.get("forfeits") or 0),
+        "gameSummaries": payload.get("rawArenaResult", {}).get("gameSummaries", []),
+        "pairedSummary": payload.get("pairedSummary"),
+        "cheapValidationFailFast": True,
+        "cheapValidation": compact_cheap_validation(payload),
+    }
+
+
 def selfplay_progress_callback(
     reporter: ProgressReporter | None,
     cfg: AutoTrainConfig,
@@ -552,6 +732,7 @@ def arena_progress_callback(
     iteration: int,
     completed_iterations: int,
     models: dict[str, Any],
+    cheap_validation: dict[str, Any] | None = None,
 ):
     if reporter is None:
         return None
@@ -568,7 +749,7 @@ def arena_progress_callback(
             completed_iterations=completed_iterations,
             self_play={"currentGames": cfg.games_per_iteration, "totalGames": cfg.games_per_iteration},
             training={"currentEpoch": cfg.train_epochs, "totalEpochs": cfg.train_epochs},
-            arena=payload,
+            arena={**payload, "cheapValidation": compact_cheap_validation(cheap_validation or {})},
             models=models,
         )
 
@@ -693,6 +874,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--parallelSelfPlay", action="store_true")
     parser.add_argument("--progressPath", default="../data/training/progress.json")
     parser.add_argument("--progressEventsPath", default="../data/training/progress_events.jsonl")
+    parser.add_argument("--cheapValidationBeforeArena", action="store_true")
+    parser.add_argument("--cheapValidationGames", type=int, default=4)
+    parser.add_argument("--cheapValidationSimulations", type=int, default=8)
+    parser.add_argument("--cheapValidationMaxPlies", type=int, default=80)
+    parser.add_argument("--cheapValidationMinScoreRate", type=float, default=0.25)
+    parser.add_argument("--cheapValidationFailFast", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -730,6 +917,12 @@ def config_from_args(args: argparse.Namespace) -> AutoTrainConfig:
         parallel_selfplay=args.parallelSelfPlay,
         progress_path=args.progressPath,
         progress_events_path=args.progressEventsPath,
+        cheap_validation_before_arena=args.cheapValidationBeforeArena,
+        cheap_validation_games=args.cheapValidationGames,
+        cheap_validation_simulations=args.cheapValidationSimulations,
+        cheap_validation_max_plies=args.cheapValidationMaxPlies,
+        cheap_validation_min_score_rate=args.cheapValidationMinScoreRate,
+        cheap_validation_fail_fast=args.cheapValidationFailFast,
     )
 
 

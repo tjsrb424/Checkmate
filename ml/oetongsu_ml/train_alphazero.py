@@ -42,6 +42,7 @@ def train_alphazero(
     seed: int = 1,
     channels: int = 64,
     resume: str | Path | None = None,
+    training_metadata: dict[str, Any] | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
     progress_every_batches: int = 10,
 ) -> dict:
@@ -95,11 +96,28 @@ def train_alphazero(
 
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata = build_training_metadata(
+        base=training_metadata,
+        data=data,
+        output=output_path,
+        epochs=epochs,
+        batch_size=batch_size,
+        lr=lr,
+        limit=limit,
+        seed=seed,
+        channels=model.channels,
+        resume=resume,
+        device=str(device),
+        sample_count=len(dataset),
+        train_count=len(train_dataset),
+        val_count=len(val_dataset),
+    )
     torch.save(
         {
             "model_state": model.state_dict(),
             "channels": model.channels,
             "metrics": [asdict(row) for row in history],
+            "training_metadata": metadata,
         },
         output_path,
     )
@@ -118,11 +136,55 @@ def train_alphazero(
         "train_count": len(train_dataset),
         "val_count": len(val_dataset),
         "parameter_count": count_parameters(model),
+        "training_metadata": metadata,
         "history": [asdict(row) for row in history],
     }
     metrics_path = output_path.with_name(f"{output_path.stem}_metrics.json")
     metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     return metrics
+
+
+def build_training_metadata(
+    *,
+    base: dict[str, Any] | None,
+    data: str | Path,
+    output: str | Path,
+    epochs: int,
+    batch_size: int,
+    lr: float,
+    limit: int | None,
+    seed: int,
+    channels: int,
+    resume: str | Path | None,
+    device: str,
+    sample_count: int,
+    train_count: int,
+    val_count: int,
+) -> dict[str, Any]:
+    metadata = dict(base or {})
+    metadata.update(
+        {
+            "source": metadata.get("source", "train_alphazero"),
+            "resume_path": str(resume) if resume else None,
+            "seed": seed,
+            "split_seed": seed,
+            "sample_count": sample_count,
+            "train_count": train_count,
+            "val_count": val_count,
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "learning_rate": lr,
+            "channels": channels,
+            "optimizer": "Adam",
+            "weight_decay": 0.0,
+            "shuffle": True,
+            "data_path": str(data),
+            "output_path": str(output),
+            "limit": limit,
+            "device": device,
+        }
+    )
+    return metadata
 
 
 def run_epoch(
