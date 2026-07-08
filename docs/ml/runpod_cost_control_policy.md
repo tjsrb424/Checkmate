@@ -16,6 +16,8 @@ Keep Oetongsu ML work from turning failed experiments into repeated GPU spend. R
 
 A RunPod job is allowed only when all of these are documented:
 
+- A current path-diff report exists when AutoTrain and ablation results disagree.
+- Any AutoTrain/ablation path mismatch has a documented explanation or a code fix before A4.
 - Objective, expected output files, and expected decision after the run.
 - Maximum wall time, expected cost, timeout, and autostop method.
 - Local smoke test or small evaluation result that justifies remote GPU use.
@@ -32,7 +34,9 @@ A RunPod job is allowed only when all of these are documented:
 
 - Read evaluation, retrain, arena, progress, and autostop artifacts.
 - Generate decision reports.
+- Generate a path-diff report before any full run when AutoTrain and ablation disagree.
 - Run unit tests and CLI smoke tests.
+- Prefer local/CPU-first evaluation when the check is CPU-bound or only reads existing checkpoints.
 - Inspect whether arena results are side-dominated, draw-threshold dominated, max-plies-heavy, or affected by illegal moves/forfeits.
 - Decide whether the next change is hyperparameter tuning, self-play target/data repair, or a pause in AlphaZero full training.
 
@@ -40,6 +44,7 @@ A RunPod job is allowed only when all of these are documented:
 
 - Candidate score rate is near `0.0`.
 - Candidate does not improve over the failed baseline.
+- AutoTrain and ablation paths disagree and the difference has not been explained.
 - Arena pairs are side-dominated or all games reach max plies without useful separation.
 - A required artifact is missing or malformed.
 - Autostop, timeout, or budget cap is not configured.
